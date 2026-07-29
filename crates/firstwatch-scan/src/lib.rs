@@ -1,6 +1,8 @@
-mod providers;
+pub mod providers;
 mod py;
 mod ts;
+
+pub use providers::ProviderSet;
 
 use std::path::Path;
 
@@ -8,7 +10,7 @@ use anyhow::{Context, Result};
 use firstwatch_schema::UsageSite;
 use walkdir::WalkDir;
 
-pub fn scan_dir(root: &Path) -> Result<Vec<UsageSite>> {
+pub fn scan_dir(root: &Path, providers: &ProviderSet) -> Result<Vec<UsageSite>> {
     let mut sites = Vec::new();
     for entry in WalkDir::new(root).into_iter().filter_entry(|e| {
         let name = e.file_name().to_string_lossy();
@@ -22,15 +24,15 @@ pub fn scan_dir(root: &Path) -> Result<Vec<UsageSite>> {
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let rel = path.strip_prefix(root).unwrap_or(path);
-        sites.extend(scan_source(&source, &rel.to_string_lossy())?);
+        sites.extend(scan_source(&source, &rel.to_string_lossy(), providers)?);
     }
     Ok(sites)
 }
 
-pub fn scan_source(source: &str, file: &str) -> Result<Vec<UsageSite>> {
+pub fn scan_source(source: &str, file: &str, providers: &ProviderSet) -> Result<Vec<UsageSite>> {
     match extension(file) {
-        Some("py") => py::scan(source, file),
-        Some("ts") | Some("tsx") | Some("js") | Some("mjs") => ts::scan(source, file),
+        Some("py") => py::scan(source, file, providers),
+        Some("ts") | Some("tsx") | Some("js") | Some("mjs") => ts::scan(source, file, providers),
         _ => Ok(Vec::new()),
     }
 }
@@ -57,7 +59,7 @@ import Stripe from "stripe";
 const client = new Stripe(key);
 const charge = await client.charges.create({ amount: 100 });
 "#;
-        let sites = scan_source(src, "billing.ts").unwrap();
+        let sites = scan_source(src, "billing.ts", &ProviderSet::default()).unwrap();
         assert_eq!(sites.len(), 1);
         assert_eq!(sites[0].surface, "charges.create");
         assert_eq!(sites[0].line, 4);
@@ -66,7 +68,7 @@ const charge = await client.charges.create({ amount: 100 });
     #[test]
     fn finds_calls_on_var_named_stripe_without_binding() {
         let src = "await stripe.customers.list({ limit: 10 });";
-        let sites = scan_source(src, "a.ts").unwrap();
+        let sites = scan_source(src, "a.ts", &ProviderSet::default()).unwrap();
         assert_eq!(sites.len(), 1);
         assert_eq!(sites[0].surface, "customers.list");
     }
@@ -77,7 +79,7 @@ const charge = await client.charges.create({ amount: 100 });
 const db = new Pool(cfg);
 await db.users.findMany({});
 "#;
-        let sites = scan_source(src, "a.ts").unwrap();
+        let sites = scan_source(src, "a.ts", &ProviderSet::default()).unwrap();
         assert!(sites.is_empty());
     }
 
@@ -88,7 +90,7 @@ import OpenAI from "openai";
 const client = new OpenAI();
 const r = await client.chat.completions.create({ model, messages });
 "#;
-        let sites = scan_source(src, "ai.ts").unwrap();
+        let sites = scan_source(src, "ai.ts", &ProviderSet::default()).unwrap();
         assert_eq!(sites.len(), 1);
         assert_eq!(sites[0].provider, "openai");
         assert_eq!(sites[0].surface, "chat.completions.create");
@@ -97,14 +99,19 @@ const r = await client.chat.completions.create({ model, messages });
     #[test]
     fn dispatches_python_by_extension() {
         let src = "client = StripeClient(key)\nclient.charges.retrieve(id)\n";
-        let sites = scan_source(src, "app.py").unwrap();
+        let sites = scan_source(src, "app.py", &ProviderSet::default()).unwrap();
         assert_eq!(sites.len(), 1);
         assert_eq!(sites[0].language, "python");
     }
 
     #[test]
     fn unknown_extension_is_empty() {
-        let sites = scan_source("stripe.charges.create()", "notes.txt").unwrap();
+        let sites = scan_source(
+            "stripe.charges.create()",
+            "notes.txt",
+            &ProviderSet::default(),
+        )
+        .unwrap();
         assert!(sites.is_empty());
     }
 }

@@ -1,0 +1,3 @@
+{"schema_version":"0.1","name":"stripe","constructors":["Stripe","StripeClient"],"roots":["stripe"]}
+{"schema_version":"0.1","name":"openai","constructors":["OpenAI","AsyncOpenAI"],"roots":["openai"]}
+{"schema_version":"0.1","name":"github","constructors":["Octokit"],"roots":["octokit","github"]}

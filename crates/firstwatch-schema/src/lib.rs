@@ -90,6 +90,17 @@ pub struct Impact {
     pub site: UsageSite,
 }
 
+/// How scan recognizes a provider in source code: constructor names
+/// that bind client variables, and module-level root identifiers.
+/// Ships as registry data so new providers need no core changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderSpec {
+    pub schema_version: String,
+    pub name: String,
+    pub constructors: Vec<String>,
+    pub roots: Vec<String>,
+}
+
 /// A provider-authored fix, shipped as data alongside a changefeed.
 /// Matches an impact by provider and surface, optionally narrowed by
 /// field and change kind. Steps run in order against the site line.

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use firstwatch_scan::ProviderSet;
 use firstwatch_schema::{read_ndjson, write_ndjson, ChangeEvent, Impact, Severity};
 
 #[derive(Parser)]
@@ -34,6 +35,9 @@ enum Command {
     Scan {
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// ProviderSpec ndjson extending the built-in provider table.
+        #[arg(long)]
+        providers: Option<PathBuf>,
     },
     /// Join a changefeed against usage sites, emit Impacts as ndjson.
     Match {
@@ -50,6 +54,9 @@ enum Command {
         path: PathBuf,
         #[arg(long)]
         events: PathBuf,
+        /// ProviderSpec ndjson extending the built-in provider table.
+        #[arg(long)]
+        providers: Option<PathBuf>,
     },
     /// Propose deterministic fixes for impacted call sites. Dry run unless --write.
     Fix {
@@ -105,8 +112,8 @@ fn main() -> Result<()> {
             let events = firstwatch_watch::diff_openapi(&old, &new, &provider)?;
             write_ndjson(io::stdout().lock(), &events)?;
         }
-        Command::Scan { path } => {
-            let sites = firstwatch_scan::scan_dir(&path)?;
+        Command::Scan { path, providers } => {
+            let sites = firstwatch_scan::scan_dir(&path, &load_providers(providers)?)?;
             write_ndjson(io::stdout().lock(), &sites)?;
         }
         Command::Match { events, sites } => {
@@ -118,9 +125,13 @@ fn main() -> Result<()> {
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             write_ndjson(io::stdout().lock(), &impacts)?;
         }
-        Command::Check { path, events } => {
+        Command::Check {
+            path,
+            events,
+            providers,
+        } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
-            let sites = firstwatch_scan::scan_dir(&path)?;
+            let sites = firstwatch_scan::scan_dir(&path, &load_providers(providers)?)?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             report(&impacts, sites.len());
         }
@@ -133,7 +144,7 @@ fn main() -> Result<()> {
             write,
         } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
-            let sites = firstwatch_scan::scan_dir(&path)?;
+            let sites = firstwatch_scan::scan_dir(&path, &ProviderSet::default())?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             let recipes = load_recipes(recipes)?;
             let outcome = firstwatch_mend::mend(&path, &impacts, &recipes)?;
@@ -218,7 +229,7 @@ fn main() -> Result<()> {
             allow_unproven,
         } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
-            let sites = firstwatch_scan::scan_dir(&path)?;
+            let sites = firstwatch_scan::scan_dir(&path, &ProviderSet::default())?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             let recipes = load_recipes(recipes)?;
             let outcome = firstwatch_mend::mend(&path, &impacts, &recipes)?;
@@ -272,6 +283,15 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn load_providers(path: Option<PathBuf>) -> Result<ProviderSet> {
+    match path {
+        Some(p) => Ok(ProviderSet::with_extra(read_ndjson(BufReader::new(
+            File::open(p)?,
+        ))?)),
+        None => Ok(ProviderSet::default()),
+    }
 }
 
 fn load_recipes(path: Option<PathBuf>) -> Result<Vec<firstwatch_schema::Recipe>> {

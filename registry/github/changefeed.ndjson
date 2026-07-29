@@ -1,0 +1,2 @@
+{"schema_version":"0.1","provider":"github","surface":"teams.listMembersLegacy","kind":"removed","confidence":"high","source":"changelog","evidence_url":"https://docs.github.com/en/rest/overview/breaking-changes"}
+{"schema_version":"0.1","provider":"github","surface":"repos.listCommits","kind":"added","confidence":"medium","source":"changelog","evidence_url":"https://docs.github.com/en/rest/commits/commits"}

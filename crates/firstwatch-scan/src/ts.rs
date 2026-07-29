@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use firstwatch_schema::{UsageSite, SCHEMA_VERSION};
 use tree_sitter::{Node, Parser, Query, QueryCursor, StreamingIterator};
 
-use crate::providers;
+use crate::providers::ProviderSet;
 
 const CALL_QUERY: &str = "(call_expression function: (member_expression) @fn)";
 
@@ -14,7 +14,7 @@ const BINDING_QUERY: &str = r#"
   value: (new_expression constructor: (identifier) @ctor))
 "#;
 
-pub fn scan(source: &str, file: &str) -> Result<Vec<UsageSite>> {
+pub fn scan(source: &str, file: &str, providers: &ProviderSet) -> Result<Vec<UsageSite>> {
     let language = tree_sitter::Language::new(tree_sitter_typescript::LANGUAGE_TYPESCRIPT);
     let mut parser = Parser::new();
     parser.set_language(&language)?;
@@ -24,7 +24,7 @@ pub fn scan(source: &str, file: &str) -> Result<Vec<UsageSite>> {
     let src = source.as_bytes();
 
     let binding_query = Query::new(&language, BINDING_QUERY)?;
-    let mut bound_vars: HashMap<String, &'static str> = HashMap::new();
+    let mut bound_vars: HashMap<String, String> = HashMap::new();
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&binding_query, tree.root_node(), src);
     while let Some(m) = matches.next() {
@@ -39,8 +39,8 @@ pub fn scan(source: &str, file: &str) -> Result<Vec<UsageSite>> {
             }
         }
         if let (Some(name), Some(ctor)) = (name, ctor) {
-            if let Some(provider) = providers::by_constructor(&ctor) {
-                bound_vars.insert(name, provider.name);
+            if let Some(provider) = providers.by_constructor(&ctor) {
+                bound_vars.insert(name, provider.name.clone());
             }
         }
     }
@@ -59,13 +59,13 @@ pub fn scan(source: &str, file: &str) -> Result<Vec<UsageSite>> {
             }
             let provider = bound_vars
                 .get(&root)
-                .copied()
-                .or_else(|| providers::by_root(&root).map(|p| p.name));
+                .cloned()
+                .or_else(|| providers.by_root(&root).map(|p| p.name.clone()));
             let Some(provider) = provider else { continue };
             let pos = node.start_position();
             sites.push(UsageSite {
                 schema_version: SCHEMA_VERSION.into(),
-                provider: provider.into(),
+                provider: provider.clone(),
                 surface: chain.join("."),
                 file: file.to_string(),
                 line: pos.row + 1,
