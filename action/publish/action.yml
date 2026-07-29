@@ -1,0 +1,48 @@
+name: firstwatch-publish
+description: For API providers. Diffs your OpenAPI spec against its previous version on every release and appends the ChangeEvents to your changefeed.
+branding:
+  icon: rss
+  color: blue
+
+inputs:
+  spec:
+    description: Path to the OpenAPI spec file in this repo.
+    required: true
+  provider:
+    description: Provider name stamped on every event.
+    required: true
+  changefeed:
+    description: Changefeed file to append to.
+    default: changefeed.ndjson
+  base-ref:
+    description: Git ref holding the previous spec version.
+    default: HEAD^
+
+runs:
+  using: composite
+  steps:
+    - name: Install firstwatch
+      shell: bash
+      run: curl -fsSL https://raw.githubusercontent.com/firstwatch-dev/firstwatch/main/install.sh | sh
+    - name: Diff spec against previous version
+      shell: bash
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        git show "${{ inputs.base-ref }}:${{ inputs.spec }}" > /tmp/spec-old.json
+        firstwatch watch --old /tmp/spec-old.json --new "${{ inputs.spec }}" \
+          --provider "${{ inputs.provider }}" > /tmp/events.ndjson
+        count=$(wc -l < /tmp/events.ndjson | tr -d ' ')
+        echo "firstwatch: $count change event(s)"
+        if [ "$count" -gt 0 ]; then
+          cat /tmp/events.ndjson >> "${{ inputs.changefeed }}"
+        fi
+    - name: Commit changefeed
+      shell: bash
+      run: |
+        if ! git diff --quiet -- "${{ inputs.changefeed }}"; then
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git add "${{ inputs.changefeed }}"
+          git commit -m "changefeed: $(date -u +%Y-%m-%d) spec changes"
+          git push
+        fi
