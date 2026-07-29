@@ -12,13 +12,15 @@ stripe/openapi history, install.sh, CI, release workflow, GitHub Action.
 - Register the npm and PyPI package names
 - Optional: domain, Homebrew tap
 
-## v0.2, recipes and reach
+## v0.2, recipes and reach, done
 
-- Tier 2 recipes: mend consumes provider-authored fix recipes as data.
-  Critical path for both the second provider and the per-provider variant.
-- Python scanning, second language for scan
-- Replay proving: record request/response fixtures, replay old vs new code
-- Opt-in test-suite verifier for prove (typecheck only today)
+- Tier 2 recipes: mend consumes provider-authored fix recipes as data,
+  with required and optional steps. Unlocks the per-provider variant.
+- Python scanning behind per-language dispatch, legacy and modern
+  stripe-python styles normalized to shared surfaces
+- Differential replay proving: same command in unpatched and patched
+  stagings, identical output required (--replay)
+- Opt-in test-suite verifier, npm test or pytest (--with-tests)
 
 ## v0.3, ecosystem
 
