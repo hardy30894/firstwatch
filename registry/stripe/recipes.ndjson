@@ -1,0 +1,1 @@
+{"schema_version":"0.1","provider":"stripe","surface":"charges.create","kind":"deprecated","steps":[{"op":"rename_surface","to":"payment_intents.create"},{"op":"set_field","name":"confirm","value":"true"},{"op":"rename_field","from":"source","to":"payment_method","optional":true}]}

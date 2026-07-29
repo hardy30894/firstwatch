@@ -57,6 +57,9 @@ enum Command {
         path: PathBuf,
         #[arg(long)]
         events: PathBuf,
+        /// Recipe ndjson file with provider-authored fixes.
+        #[arg(long)]
+        recipes: Option<PathBuf>,
         #[arg(long)]
         write: bool,
     },
@@ -66,6 +69,9 @@ enum Command {
         path: PathBuf,
         #[arg(long)]
         events: PathBuf,
+        /// Recipe ndjson file with provider-authored fixes.
+        #[arg(long)]
+        recipes: Option<PathBuf>,
         #[arg(long)]
         branch: Option<String>,
         #[arg(long)]
@@ -107,12 +113,14 @@ fn main() -> Result<()> {
         Command::Fix {
             path,
             events,
+            recipes,
             write,
         } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
             let sites = firstwatch_scan::scan_dir(&path)?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
-            let outcome = firstwatch_mend::mend(&path, &impacts)?;
+            let recipes = load_recipes(recipes)?;
+            let outcome = firstwatch_mend::mend(&path, &impacts, &recipes)?;
             for patch in &outcome.patches {
                 println!("{}:{}", patch.file, patch.line);
                 println!("- {}", patch.old_line.trim());
@@ -175,6 +183,7 @@ fn main() -> Result<()> {
         Command::Pr {
             path,
             events,
+            recipes,
             branch,
             draft,
             allow_unproven,
@@ -182,7 +191,8 @@ fn main() -> Result<()> {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
             let sites = firstwatch_scan::scan_dir(&path)?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
-            let outcome = firstwatch_mend::mend(&path, &impacts)?;
+            let recipes = load_recipes(recipes)?;
+            let outcome = firstwatch_mend::mend(&path, &impacts, &recipes)?;
             if outcome.patches.is_empty() {
                 println!(
                     "firstwatch: nothing to patch, {} refused. No PR to open.",
@@ -221,6 +231,13 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn load_recipes(path: Option<PathBuf>) -> Result<Vec<firstwatch_schema::Recipe>> {
+    match path {
+        Some(p) => read_ndjson(BufReader::new(File::open(p)?)),
+        None => Ok(Vec::new()),
+    }
 }
 
 fn report(impacts: &[Impact], scanned_sites: usize) {

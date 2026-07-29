@@ -90,6 +90,58 @@ pub struct Impact {
     pub site: UsageSite,
 }
 
+/// A provider-authored fix, shipped as data alongside a changefeed.
+/// Matches an impact by provider and surface, optionally narrowed by
+/// field and change kind. Steps run in order against the site line.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Recipe {
+    pub schema_version: String,
+    pub provider: String,
+    pub surface: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ChangeKind>,
+    pub steps: Vec<RecipeStep>,
+}
+
+/// Optional steps apply where they can and skip where they cannot,
+/// for fields not every call site passes. Required steps fail the
+/// whole recipe when they cannot apply cleanly.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum RecipeStep {
+    RenameSurface {
+        to: String,
+    },
+    RenameField {
+        from: String,
+        to: String,
+        #[serde(default)]
+        optional: bool,
+    },
+    SetField {
+        name: String,
+        value: String,
+    },
+    RemoveField {
+        name: String,
+        #[serde(default)]
+        optional: bool,
+    },
+}
+
+impl RecipeStep {
+    pub fn is_optional(&self) -> bool {
+        match self {
+            RecipeStep::RenameField { optional, .. } | RecipeStep::RemoveField { optional, .. } => {
+                *optional
+            }
+            _ => false,
+        }
+    }
+}
+
 /// A proposed line edit. Proposed means unproven: nothing is applied
 /// unless the precondition held at mend time, and nothing should merge
 /// without the prove gate downstream.

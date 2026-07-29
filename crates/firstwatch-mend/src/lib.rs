@@ -1,27 +1,22 @@
+mod recipe;
+
 use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use firstwatch_schema::{ChangeKind, Impact, PatchCandidate, Refusal, SCHEMA_VERSION};
+use firstwatch_schema::{ChangeKind, Impact, PatchCandidate, Recipe, Refusal, SCHEMA_VERSION};
 
 pub struct MendOutcome {
     pub patches: Vec<PatchCandidate>,
     pub refusals: Vec<Refusal>,
 }
 
-pub fn mend(root: &Path, impacts: &[Impact]) -> Result<MendOutcome> {
+pub fn mend(root: &Path, impacts: &[Impact], recipes: &[Recipe]) -> Result<MendOutcome> {
     let mut files: HashMap<String, Vec<String>> = HashMap::new();
     let mut patches = Vec::new();
     let mut refusals = Vec::new();
 
     for impact in impacts {
-        let Some(replacement) = replacement_surface(impact) else {
-            refusals.push(refuse(
-                impact,
-                "no deterministic rewrite for this change kind",
-            ));
-            continue;
-        };
         let lines = match files.entry(impact.site.file.clone()) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
             std::collections::hash_map::Entry::Vacant(e) => {
@@ -37,7 +32,25 @@ pub fn mend(root: &Path, impacts: &[Impact]) -> Result<MendOutcome> {
             refusals.push(refuse(impact, "site line no longer contains the surface"));
             continue;
         }
-        let new_line = old_line.replace(&impact.site.surface, &replacement);
+
+        let new_line = if let Some(r) = recipe::find_recipe(recipes, impact) {
+            match recipe::apply_recipe(old_line, &impact.site.surface, r) {
+                Ok(line) => line,
+                Err(reason) => {
+                    refusals.push(refuse(impact, &format!("recipe failed: {reason}")));
+                    continue;
+                }
+            }
+        } else if let Some(replacement) = replacement_surface(impact) {
+            old_line.replace(&impact.site.surface, &replacement)
+        } else {
+            refusals.push(refuse(
+                impact,
+                "no recipe and no deterministic rewrite for this change kind",
+            ));
+            continue;
+        };
+
         patches.push(PatchCandidate {
             schema_version: SCHEMA_VERSION.into(),
             file: impact.site.file.clone(),
@@ -144,6 +157,7 @@ mod tests {
                 "billing.ts",
                 1,
             )],
+            &[],
         )
         .unwrap();
         assert_eq!(outcome.patches.len(), 1);
@@ -162,7 +176,12 @@ mod tests {
     fn refuses_removal_without_replacement() {
         let dir = std::env::temp_dir().join("fw-mend-refuse-kind");
         setup(&dir, "await stripe.charges.create({});\n");
-        let outcome = mend(&dir, &[impact(ChangeKind::Removed, None, "billing.ts", 1)]).unwrap();
+        let outcome = mend(
+            &dir,
+            &[impact(ChangeKind::Removed, None, "billing.ts", 1)],
+            &[],
+        )
+        .unwrap();
         assert!(outcome.patches.is_empty());
         assert_eq!(outcome.refusals.len(), 1);
     }
@@ -179,6 +198,7 @@ mod tests {
                 "billing.ts",
                 1,
             )],
+            &[],
         )
         .unwrap();
         assert!(outcome.patches.is_empty());
