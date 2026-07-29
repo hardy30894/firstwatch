@@ -103,19 +103,46 @@ fn main() -> Result<()> {
                     refusal.reason
                 );
             }
-            if write {
-                let applied = firstwatch_mend::apply(&path, &outcome.patches)?;
-                println!(
-                    "firstwatch: applied {applied} of {} proposed patches, {} refused. Run your tests.",
-                    outcome.patches.len(),
-                    outcome.refusals.len()
-                );
-            } else {
+            if !write {
                 println!(
                     "firstwatch: {} patches proposed, {} refused. Re-run with --write to apply.",
                     outcome.patches.len(),
                     outcome.refusals.len()
                 );
+                return Ok(());
+            }
+            if outcome.patches.is_empty() {
+                println!("firstwatch: nothing to apply, {} refused.", outcome.refusals.len());
+                return Ok(());
+            }
+            let verifiers = firstwatch_prove::detect_verifiers(&path);
+            if verifiers.is_empty() {
+                let applied = firstwatch_mend::apply(&path, &outcome.patches)?;
+                println!(
+                    "firstwatch: applied {applied} patches UNPROVEN, no verifiers detected. Run your tests.",
+                );
+                return Ok(());
+            }
+            let verdict = firstwatch_prove::prove(&path, &outcome.patches, &verifiers)?;
+            for check in &verdict.checks {
+                let status = if check.passed { "ok" } else { "FAILED" };
+                println!("[prove] {} {status}", check.name);
+                if !check.passed && !check.output_tail.is_empty() {
+                    println!("{}", check.output_tail);
+                }
+            }
+            if verdict.proven {
+                let applied = firstwatch_mend::apply(&path, &outcome.patches)?;
+                println!(
+                    "firstwatch: applied {applied} patches, proven by {} check(s).",
+                    verdict.checks.len()
+                );
+            } else {
+                println!(
+                    "firstwatch: refused to apply {} patches, proof failed. Your tree is untouched.",
+                    outcome.patches.len()
+                );
+                std::process::exit(1);
             }
         }
     }

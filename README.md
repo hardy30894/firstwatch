@@ -25,7 +25,13 @@ watch -> scan -> match -> mend -> prove
 - **scan**: tree-sitter scan of your repo, emits UsageSites
 - **match**: pure join, emits Impacts
 - **mend**: deterministic rewrites with preconditions. Anything it cannot fix mechanically it refuses, with the reason
-- **prove**: a patch ships only if it typechecks, passes tests, and survives replay (planned)
+- **prove**: patches are applied to a staged copy and verifiers run there. Proof fails, nothing is written:
+
+```
+[prove] typecheck (tsc --noEmit) FAILED
+src/billing.ts(8,40): error TS2741: Property 'confirm' is missing ...
+firstwatch: refused to apply 1 patches, proof failed. Your tree is untouched.
+```
 
 ```
 $ firstwatch fix --events registry/stripe/sample.ndjson --write
@@ -44,7 +50,7 @@ firstwatch scan | firstwatch match --events registry/stripe/sample.ndjson
 
 ## Status
 
-v0.1, early. Working today: OpenAPI spec diffing (validated on real 7.8MB Stripe specs, ~110ms per diff), TypeScript scanning for Stripe SDK usage, changefeed matching, `check` reports, `fix` with deterministic tier 1 rewrites. The Stripe changefeed in `registry/` is generated from real stripe/openapi tag history by `scripts/seed-stripe.sh`. Schema is versioned but not yet stable.
+v0.1, early. Working today: OpenAPI spec diffing (validated on real 7.8MB Stripe specs, ~110ms per diff), TypeScript scanning for Stripe SDK usage, changefeed matching, `check` reports, `fix` with deterministic tier 1 rewrites, and the prove gate (typecheck in a staged copy, failed proof blocks the write). The Stripe changefeed in `registry/` is generated from real stripe/openapi tag history by `scripts/seed-stripe.sh`. Schema is versioned but not yet stable.
 
 ## Build
 
