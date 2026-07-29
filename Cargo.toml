@@ -8,6 +8,8 @@ members = [
     "crates/firstwatch-mend",
     "crates/firstwatch-prove",
     "crates/firstwatch-cli",
+    "bindings/node",
+    "bindings/python",
 ]
 
 [workspace.package]

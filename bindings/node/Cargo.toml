@@ -1,0 +1,23 @@
+[package]
+name = "firstwatch-node"
+description = "Node bindings for the firstwatch core."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+firstwatch-schema = { path = "../../crates/firstwatch-schema" }
+firstwatch-scan = { path = "../../crates/firstwatch-scan" }
+firstwatch-match = { path = "../../crates/firstwatch-match" }
+firstwatch-watch = { path = "../../crates/firstwatch-watch" }
+serde.workspace = true
+serde_json.workspace = true
+napi = "2"
+napi-derive = "2"
+
+[build-dependencies]
+napi-build = "2"
