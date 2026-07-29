@@ -48,6 +48,16 @@ Blocks compose as Unix pipes:
 firstwatch scan | firstwatch match --events registry/stripe/sample.ndjson
 ```
 
+When you want the change as a PR instead of a local edit:
+
+```
+$ firstwatch pr --events registry/stripe/changefeed.ndjson
+[prove] typecheck (tsc --noEmit) ok
+firstwatch: PR opened from firstwatch/stripe-fixes.
+```
+
+The PR body carries the proof checks, one line per patch with the effective version and an evidence link, and a "needs human attention" section for every refusal. No proof, no PR, unless you pass --allow-unproven.
+
 ## Status
 
 v0.1, early. Working today: OpenAPI spec diffing (validated on real 7.8MB Stripe specs, ~110ms per diff), TypeScript scanning for Stripe SDK usage, changefeed matching, `check` reports, `fix` with deterministic tier 1 rewrites, and the prove gate (typecheck in a staged copy, failed proof blocks the write). The Stripe changefeed in `registry/` is generated from real stripe/openapi tag history by `scripts/seed-stripe.sh`. Schema is versioned but not yet stable.
