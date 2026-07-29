@@ -1,3 +1,4 @@
+mod fleet;
 mod pr;
 
 use std::fs::File;
@@ -76,6 +77,22 @@ enum Command {
         replay: Option<String>,
         #[arg(long)]
         write: bool,
+    },
+    /// Run pr across a fleet of repos from a list of paths or git URLs.
+    Fleet {
+        /// File with one repo path or git URL per line.
+        #[arg(long)]
+        repos: PathBuf,
+        #[arg(long)]
+        events: PathBuf,
+        #[arg(long)]
+        recipes: Option<PathBuf>,
+        /// Working directory for clones.
+        #[arg(long, default_value = ".firstwatch-fleet")]
+        work_dir: PathBuf,
+        /// Report what each repo needs without branching or opening PRs.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Fix on a new branch, commit, push, and open a PR. Requires a clean worktree.
     Pr {
@@ -216,6 +233,74 @@ fn main() -> Result<()> {
                     outcome.patches.len()
                 );
                 std::process::exit(1);
+            }
+        }
+        Command::Fleet {
+            repos,
+            events,
+            recipes,
+            work_dir,
+            dry_run,
+        } => {
+            let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(&events)?))?;
+            let recipes = load_recipes(recipes)?;
+            let targets = fleet::resolve(&repos, &work_dir)?;
+            let mut summary = Vec::new();
+            for target in &targets {
+                let sites = firstwatch_scan::scan_dir(&target.path, &ProviderSet::default())?;
+                let impacts = firstwatch_match::match_impacts(&events, &sites);
+                if impacts.is_empty() {
+                    summary.push((target.name.clone(), 0, 0, "clean".to_string()));
+                    continue;
+                }
+                let outcome = firstwatch_mend::mend(&target.path, &impacts, &recipes)?;
+                if dry_run || outcome.patches.is_empty() {
+                    summary.push((
+                        target.name.clone(),
+                        outcome.patches.len(),
+                        outcome.refusals.len(),
+                        if dry_run { "dry run" } else { "needs human" }.to_string(),
+                    ));
+                    continue;
+                }
+                let verifiers = firstwatch_prove::detect_verifiers(&target.path);
+                let verdict = if verifiers.is_empty() {
+                    None
+                } else {
+                    Some(firstwatch_prove::prove(
+                        &target.path,
+                        &outcome.patches,
+                        &verifiers,
+                    )?)
+                };
+                let proven = verdict.as_ref().map(|v| v.proven).unwrap_or(false);
+                let status = if proven {
+                    match pr::open_pr(
+                        pr::PrArgs {
+                            root: &target.path,
+                            branch: None,
+                            draft: false,
+                            allow_unproven: false,
+                        },
+                        &outcome,
+                        verdict.as_ref(),
+                    ) {
+                        Ok(()) => "pr opened",
+                        Err(_) => "pr failed",
+                    }
+                } else {
+                    "proof failed"
+                };
+                summary.push((
+                    target.name.clone(),
+                    outcome.patches.len(),
+                    outcome.refusals.len(),
+                    status.to_string(),
+                ));
+            }
+            println!("repo  patches  refused  status");
+            for (name, patches, refused, status) in &summary {
+                println!("{name}  {patches}  {refused}  {status}");
             }
         }
         Command::Pr {
