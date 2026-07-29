@@ -279,9 +279,18 @@ Respond with only a JSON object matching this schema,              no prose and 
     }
 }
 
+/// Runs the bridge command with a hard timeout so a hung script cannot
+/// hang an unattended run. Default 120s, FIRSTWATCH_LLM_TIMEOUT overrides.
 fn request_command(cmd: &str, prompt: &str, schema: &Value) -> Result<String> {
-    use std::io::Write;
+    use std::io::{Read, Write};
     use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let timeout = std::env::var("FIRSTWATCH_LLM_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(120);
 
     let mut child = Command::new("sh")
         .args(["-c", cmd])
@@ -296,14 +305,38 @@ fn request_command(cmd: &str, prompt: &str, schema: &Value) -> Result<String> {
         .take()
         .context("opening llm command stdin")?
         .write_all(prompt.as_bytes())?;
-    let output = child.wait_with_output()?;
-    if !output.status.success() {
-        bail!(
-            "llm command failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+
+    let mut stdout_pipe = child.stdout.take().context("opening llm command stdout")?;
+    let mut stderr_pipe = child.stderr.take().context("opening llm command stderr")?;
+    let stdout_reader = std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stdout_pipe.read_to_string(&mut buf);
+        buf
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stderr_pipe.read_to_string(&mut buf);
+        buf
+    });
+
+    let (tx, rx) = mpsc::channel();
+    let waiter = std::thread::spawn(move || {
+        let status = child.wait();
+        let _ = tx.send(());
+        (child, status)
+    });
+    let timed_out = rx.recv_timeout(Duration::from_secs(timeout)).is_err();
+    if timed_out {
+        bail!("llm command timed out after {timeout}s: {cmd}");
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    let (_, status) = waiter.join().expect("waiter thread panicked");
+    let status = status.context("waiting for llm command")?;
+    let stdout = stdout_reader.join().unwrap_or_default();
+    let stderr = stderr_reader.join().unwrap_or_default();
+    if !status.success() {
+        bail!("llm command failed: {}", stderr.trim());
+    }
+    Ok(stdout)
 }
 
 fn request_error(e: ureq::Error) -> anyhow::Error {
