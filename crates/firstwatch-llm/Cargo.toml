@@ -1,0 +1,14 @@
+[package]
+name = "firstwatch-llm"
+description = "Tier 3 synthesis and changelog parsing via the Claude API. User's own key, off by default, always behind the prove gate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+firstwatch-schema = { path = "../firstwatch-schema" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+ureq = { version = "2", features = ["json"] }

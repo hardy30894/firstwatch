@@ -155,7 +155,8 @@ impl RecipeStep {
 
 /// A proposed line edit. Proposed means unproven: nothing is applied
 /// unless the precondition held at mend time, and nothing should merge
-/// without the prove gate downstream.
+/// without the prove gate downstream. `origin` records which tier
+/// produced it so PRs can label synthesized patches honestly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatchCandidate {
     pub schema_version: String,
@@ -163,7 +164,13 @@ pub struct PatchCandidate {
     pub line: usize,
     pub old_line: String,
     pub new_line: String,
+    #[serde(default = "default_origin")]
+    pub origin: String,
     pub impact: Impact,
+}
+
+fn default_origin() -> String {
+    "deterministic".into()
 }
 
 /// An impact mend looked at and declined to patch, with the reason.

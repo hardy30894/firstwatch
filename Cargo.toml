@@ -7,6 +7,7 @@ members = [
     "crates/firstwatch-match",
     "crates/firstwatch-mend",
     "crates/firstwatch-prove",
+    "crates/firstwatch-llm",
     "crates/firstwatch-cli",
     "bindings/node",
     "bindings/python",

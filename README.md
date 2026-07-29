@@ -60,7 +60,7 @@ The PR body carries the proof checks, one line per patch with the effective vers
 
 ## Status
 
-v0.1, early. Working today: OpenAPI spec diffing (validated on real 7.8MB Stripe specs, ~110ms per diff), TypeScript scanning for Stripe SDK usage, changefeed matching, `check` reports, `fix` with deterministic tier 1 rewrites, and the prove gate (typecheck in a staged copy, failed proof blocks the write). The Stripe changefeed in `registry/` is generated from real stripe/openapi tag history by `scripts/seed-stripe.sh`. Schema is versioned but not yet stable.
+v0.1, early. Working today: OpenAPI spec diffing (validated on real 7.8MB Stripe specs, ~110ms per diff), TypeScript and Python scanning across providers, changefeed matching, `check` reports, `fix` with three patch tiers (deterministic rewrites, provider recipes, opt-in Claude synthesis via `--llm` using your own key), changelog parsing to structured events, the prove gate (typecheck, tests, differential replay in staged copies; failed proof blocks the write), `pr`, and `fleet` for many repos. Synthesized patches are always labeled and face the same proof gate. The Stripe changefeed in `registry/` is generated from real stripe/openapi tag history by `scripts/seed-stripe.sh`. Schema is versioned but not yet stable.
 
 ## Build
 

@@ -33,16 +33,19 @@ pub fn mend(root: &Path, impacts: &[Impact], recipes: &[Recipe]) -> Result<MendO
             continue;
         }
 
-        let new_line = if let Some(r) = recipe::find_recipe(recipes, impact) {
+        let (new_line, origin) = if let Some(r) = recipe::find_recipe(recipes, impact) {
             match recipe::apply_recipe(old_line, &impact.site.surface, r) {
-                Ok(line) => line,
+                Ok(line) => (line, "recipe"),
                 Err(reason) => {
                     refusals.push(refuse(impact, &format!("recipe failed: {reason}")));
                     continue;
                 }
             }
         } else if let Some(replacement) = replacement_surface(impact) {
-            old_line.replace(&impact.site.surface, &replacement)
+            (
+                old_line.replace(&impact.site.surface, &replacement),
+                "tier1",
+            )
         } else {
             refusals.push(refuse(
                 impact,
@@ -57,6 +60,7 @@ pub fn mend(root: &Path, impacts: &[Impact], recipes: &[Recipe]) -> Result<MendO
             line: impact.site.line,
             old_line: old_line.clone(),
             new_line,
+            origin: origin.into(),
             impact: impact.clone(),
         });
     }

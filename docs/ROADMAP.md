@@ -32,17 +32,18 @@ stripe/openapi history, install.sh, CI, release workflow, GitHub Action.
   firstwatch-registry into their own repos, spec v1
 - Community contribution docs for changefeeds and recipes
 
-## v0.4, agent tier and provider variant
+## v0.4, agent tier and provider variant, done
 
 - Done: provider publishing flow, action/publish diffs the spec on every
   release and appends to the provider's changefeed
 - Done: multi-repo runner, firstwatch fleet fans scan-match-mend-prove-pr
   across a list of repos or clone URLs. The per-provider variant is
   assembled: publish action upstream, fleet downstream.
-- Mend tier 3: LLM synthesis for non-mechanical changes. Pluggable provider,
-  user's own key, off by default, always behind the prove gate.
-- Changelog parser in watch: prose release notes to ChangeEvents, flagged
-  lower confidence
+- Done: mend tier 3, Claude synthesis for non-mechanical changes behind
+  --llm. User's own ANTHROPIC_API_KEY, off by default, patches labeled
+  llm and always behind the prove gate.
+- Done: changelog subcommand, prose release notes to ChangeEvents via
+  structured outputs, everything flagged low confidence
 
 ## v1.0, network effects
 

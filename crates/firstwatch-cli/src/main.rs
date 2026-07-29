@@ -3,7 +3,7 @@ mod pr;
 
 use std::fs::File;
 use std::io::{self, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -59,6 +59,14 @@ enum Command {
         #[arg(long)]
         providers: Option<PathBuf>,
     },
+    /// Parse prose release notes into ChangeEvents via the Claude API.
+    /// Uses ANTHROPIC_API_KEY; events are flagged low confidence.
+    Changelog {
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long)]
+        provider: String,
+    },
     /// Propose deterministic fixes for impacted call sites. Dry run unless --write.
     Fix {
         #[arg(default_value = ".")]
@@ -75,6 +83,11 @@ enum Command {
         /// stagings, requiring identical output.
         #[arg(long)]
         replay: Option<String>,
+        /// Synthesize fixes for refused impacts via the Claude API.
+        /// Uses ANTHROPIC_API_KEY; synthesized patches still face the
+        /// prove gate like any other.
+        #[arg(long)]
+        llm: bool,
         #[arg(long)]
         write: bool,
     },
@@ -152,21 +165,33 @@ fn main() -> Result<()> {
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             report(&impacts, sites.len());
         }
+        Command::Changelog { file, provider } => {
+            let llm = firstwatch_llm::Llm::from_env()
+                .ok_or_else(|| anyhow::anyhow!("ANTHROPIC_API_KEY is not set"))?;
+            let text = std::fs::read_to_string(&file)?;
+            let events = llm.parse_changelog(&text, &provider)?;
+            write_ndjson(io::stdout().lock(), &events)?;
+        }
         Command::Fix {
             path,
             events,
             recipes,
             with_tests,
             replay,
+            llm,
             write,
         } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
             let sites = firstwatch_scan::scan_dir(&path, &ProviderSet::default())?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             let recipes = load_recipes(recipes)?;
-            let outcome = firstwatch_mend::mend(&path, &impacts, &recipes)?;
+            let mut outcome = firstwatch_mend::mend(&path, &impacts, &recipes)?;
+            if llm {
+                synthesize_refused(&path, &mut outcome)?;
+            }
             for patch in &outcome.patches {
-                println!("{}:{}", patch.file, patch.line);
+                let tag = if patch.origin == "llm" { " (llm)" } else { "" };
+                println!("{}:{}{tag}", patch.file, patch.line);
                 println!("- {}", patch.old_line.trim());
                 println!("+ {}", patch.new_line.trim());
             }
@@ -367,6 +392,50 @@ fn main() -> Result<()> {
             )?;
         }
     }
+    Ok(())
+}
+
+fn synthesize_refused(root: &Path, outcome: &mut firstwatch_mend::MendOutcome) -> Result<()> {
+    let Some(llm) = firstwatch_llm::Llm::from_env() else {
+        println!("firstwatch: --llm set but ANTHROPIC_API_KEY is not, skipping synthesis.");
+        return Ok(());
+    };
+    let mut remaining = Vec::new();
+    for refusal in outcome.refusals.drain(..) {
+        let site = &refusal.impact.site;
+        let Ok(content) = std::fs::read_to_string(root.join(&site.file)) else {
+            remaining.push(refusal);
+            continue;
+        };
+        let lines: Vec<&str> = content.lines().collect();
+        let Some(old_line) = lines.get(site.line - 1).copied() else {
+            remaining.push(refusal);
+            continue;
+        };
+        let start = site.line.saturating_sub(6);
+        let end = (site.line + 5).min(lines.len());
+        let context = lines[start..end].join(
+            "
+",
+        );
+        match llm.fix_line(&refusal.impact, old_line, &context) {
+            Ok(new_line) => outcome.patches.push(firstwatch_schema::PatchCandidate {
+                schema_version: firstwatch_schema::SCHEMA_VERSION.into(),
+                file: site.file.clone(),
+                line: site.line,
+                old_line: old_line.to_string(),
+                new_line,
+                origin: "llm".into(),
+                impact: refusal.impact.clone(),
+            }),
+            Err(reason) => {
+                let mut refusal = refusal;
+                refusal.reason = format!("{} (llm: {reason})", refusal.reason);
+                remaining.push(refusal);
+            }
+        }
+    }
+    outcome.refusals = remaining;
     Ok(())
 }
 

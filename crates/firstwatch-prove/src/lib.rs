@@ -208,6 +208,7 @@ mod tests {
             line: 1,
             old_line: old_line.into(),
             new_line: new_line.into(),
+            origin: "tier1".into(),
             impact: Impact {
                 schema_version: SCHEMA_VERSION.into(),
                 severity: Severity::Deprecated,

@@ -82,8 +82,13 @@ fn pr_body(outcome: &MendOutcome, verdict: Option<&Verdict>) -> String {
     body.push_str("\n## Patches\n");
     for patch in &outcome.patches {
         let change = &patch.impact.change;
+        let origin_note = if patch.origin == "llm" {
+            " [synthesized]"
+        } else {
+            ""
+        };
         body.push_str(&format!(
-            "- `{}:{}` {} ({:?}{})",
+            "- `{}:{}` {}{origin_note} ({:?}{})",
             patch.file,
             patch.line,
             patch.impact.site.surface,
