@@ -173,6 +173,34 @@ fn default_origin() -> String {
     "deterministic".into()
 }
 
+/// One anonymized edge of the usage graph: this provider surface is
+/// called from code in this language, this many times. No file paths,
+/// no repo names; anonymous by construction, not by scrubbing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageEdge {
+    pub schema_version: String,
+    pub provider: String,
+    pub surface: String,
+    pub language: String,
+    pub count: u64,
+}
+
+/// A fix that passed the prove gate somewhere, kept so the same change
+/// never has to be solved twice. Old and new lines are stored trimmed;
+/// indentation is reapplied per site.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvenFix {
+    pub schema_version: String,
+    pub provider: String,
+    pub surface: String,
+    pub kind: ChangeKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    pub old_line: String,
+    pub new_line: String,
+    pub checks: Vec<String>,
+}
+
 /// An impact mend looked at and declined to patch, with the reason.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Refusal {

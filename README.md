@@ -62,6 +62,7 @@ Changefeeds describe what changed upstream. Ready-made feeds for Stripe, OpenAI,
 | `firstwatch changelog` | Parse prose release notes into a changefeed (flagged low confidence) |
 | `firstwatch blast` | Which repos in a fleet break, before anything ships. Read-only |
 | `firstwatch fleet` | Run the whole pipeline across many repos, PRs included |
+| `firstwatch share` | Emit anonymized usage edges or proven fixes to contribute to the registry |
 | `firstwatch scan` / `match` | The underlying blocks, composable as Unix pipes |
 
 ## The proof gate
@@ -128,7 +129,7 @@ Blast answers "who breaks if this ships" across repo paths or clone URLs: per-re
 firstwatch fleet --repos repos.txt --events changefeed.ndjson --llm
 ```
 
-Fleet runs the whole pipeline per repo and opens PRs. Proven fixes propagate: the first proven patch for a change becomes the template for the same change in every later repo, so each unique change is synthesized at most once and every repo still gets its own proof.
+Fleet runs the whole pipeline per repo and opens PRs. Proven fixes propagate, and not just within a run: every fix that passes your prove gate is remembered locally and reused by later runs, so the same change never has to be solved twice. Share yours with `firstwatch share --proven` and the whole ecosystem stops solving it too. With shared usage data, `blast --usage registry/usage.ndjson` answers "who breaks" ecosystem-wide, no repos needed.
 
 ## Run it in CI
 

@@ -234,6 +234,7 @@ dependencies = [
  "firstwatch-schema",
  "firstwatch-watch",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

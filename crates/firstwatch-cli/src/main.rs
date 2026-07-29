@@ -1,5 +1,6 @@
 mod fleet;
 mod pr;
+mod store;
 
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -91,14 +92,31 @@ enum Command {
         #[arg(long)]
         write: bool,
     },
+    /// Emit shareable graph data: anonymized usage edges from a scan, or
+    /// your locally proven fixes with --proven. Contribute either to the
+    /// registry as a pull request; nothing is ever uploaded automatically.
+    Share {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Emit the local proven-fix store instead of usage edges.
+        #[arg(long)]
+        proven: bool,
+        /// ProviderSpec ndjson extending the built-in provider table.
+        #[arg(long)]
+        providers: Option<PathBuf>,
+    },
     /// Blast radius: which repos does a changefeed break, before anything
     /// ships. Scan and match only; nothing is modified.
     Blast {
-        /// File with one repo path or git URL per line.
+        /// File with one repo path or git URL per line. Omit with --usage
+        /// to run in ecosystem mode over shared usage edges.
         #[arg(long)]
-        repos: PathBuf,
+        repos: Option<PathBuf>,
         #[arg(long)]
         events: PathBuf,
+        /// UsageEdge ndjson of shared usage data for ecosystem mode.
+        #[arg(long)]
+        usage: Option<PathBuf>,
         /// ProviderSpec ndjson extending the built-in provider table.
         #[arg(long)]
         providers: Option<PathBuf>,
@@ -206,6 +224,11 @@ fn main() -> Result<()> {
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             let recipes = load_recipes(recipes)?;
             let mut outcome = firstwatch_mend::mend(&path, &impacts, &recipes)?;
+            let known = store::load_templates();
+            let reused = propagate(&path, &known, &mut outcome);
+            if reused > 0 {
+                println!("firstwatch: reused {reused} previously proven fix(es).");
+            }
             if llm {
                 synthesize_refused(&path, &mut outcome)?;
             }
@@ -268,6 +291,8 @@ fn main() -> Result<()> {
             }
             if verdict.proven {
                 let applied = firstwatch_mend::apply(&path, &outcome.patches)?;
+                let checks: Vec<String> = verdict.checks.iter().map(|c| c.name.clone()).collect();
+                let _ = store::record_proven(&outcome.patches, &checks);
                 println!(
                     "firstwatch: applied {applied} patches, proven by {} check(s).",
                     verdict.checks.len()
@@ -280,13 +305,114 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+        Command::Share {
+            path,
+            proven,
+            providers,
+        } => {
+            if proven {
+                let store = store::store_path()
+                    .ok_or_else(|| anyhow::anyhow!("cannot resolve the store path"))?;
+                match std::fs::read_to_string(&store) {
+                    Ok(content) => print!("{content}"),
+                    Err(_) => eprintln!("firstwatch: no proven fixes recorded yet."),
+                }
+                return Ok(());
+            }
+            let sites = firstwatch_scan::scan_dir(&path, &load_providers(providers)?)?;
+            let mut counts: std::collections::BTreeMap<(String, String, String), u64> =
+                std::collections::BTreeMap::new();
+            for site in &sites {
+                *counts
+                    .entry((
+                        site.provider.clone(),
+                        site.surface.clone(),
+                        site.language.clone(),
+                    ))
+                    .or_default() += 1;
+            }
+            let edges: Vec<firstwatch_schema::UsageEdge> = counts
+                .into_iter()
+                .map(
+                    |((provider, surface, language), count)| firstwatch_schema::UsageEdge {
+                        schema_version: firstwatch_schema::SCHEMA_VERSION.into(),
+                        provider,
+                        surface,
+                        language,
+                        count,
+                    },
+                )
+                .collect();
+            write_ndjson(io::stdout().lock(), &edges)?;
+            eprintln!(
+                "firstwatch: {} anonymized edge(s): provider, surface, language, count. \
+                 No file paths, no repo names. Contribute by PR to the registry.",
+                edges.len()
+            );
+        }
         Command::Blast {
             repos,
             events,
+            usage,
             providers,
             work_dir,
         } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(&events)?))?;
+            if let Some(usage) = usage {
+                let edges: Vec<firstwatch_schema::UsageEdge> =
+                    read_ndjson(BufReader::new(File::open(&usage)?))?;
+                let mut total: u64 = 0;
+                let mut lines = Vec::new();
+                for event in &events {
+                    let breaking = matches!(
+                        event.kind,
+                        firstwatch_schema::ChangeKind::Removed
+                            | firstwatch_schema::ChangeKind::Renamed
+                            | firstwatch_schema::ChangeKind::TypeChanged
+                            | firstwatch_schema::ChangeKind::RequiredAdded
+                    );
+                    if !breaking {
+                        continue;
+                    }
+                    let hits: Vec<&firstwatch_schema::UsageEdge> = edges
+                        .iter()
+                        .filter(|e| e.provider == event.provider && e.surface == event.surface)
+                        .collect();
+                    if hits.is_empty() {
+                        continue;
+                    }
+                    let count: u64 = hits.iter().map(|e| e.count).sum();
+                    let mut langs: Vec<&str> = hits.iter().map(|e| e.language.as_str()).collect();
+                    langs.sort_unstable();
+                    langs.dedup();
+                    total += count;
+                    lines.push(format!(
+                        "  {} {}{} ({:?}) -> {count} known call site(s) across {}",
+                        event.provider,
+                        event.surface,
+                        event
+                            .field
+                            .as_deref()
+                            .map(|f| format!(" ({f})"))
+                            .unwrap_or_default(),
+                        event.kind,
+                        langs.join(", ")
+                    ));
+                }
+                if lines.is_empty() {
+                    println!("firstwatch: no known consumer breaks.");
+                } else {
+                    println!("ecosystem blast radius:");
+                    for line in lines {
+                        println!("{line}");
+                    }
+                    println!("\nfirstwatch: {total} known call site(s) break.");
+                    std::process::exit(1);
+                }
+                return Ok(());
+            }
+            let repos = repos
+                .ok_or_else(|| anyhow::anyhow!("pass --repos, or --usage for ecosystem mode"))?;
             let provider_set = load_providers(providers)?;
             let targets = fleet::resolve(&repos, &work_dir)?;
             let mut total_breaking = 0;
@@ -353,7 +479,7 @@ fn main() -> Result<()> {
             let targets = fleet::resolve(&repos, &work_dir)?;
             let mut summary = Vec::new();
             let mut templates: std::collections::HashMap<String, (String, String)> =
-                std::collections::HashMap::new();
+                store::load_templates();
             for target in &targets {
                 let sites = firstwatch_scan::scan_dir(&target.path, &ProviderSet::default())?;
                 let impacts = firstwatch_match::match_impacts(&events, &sites);
@@ -395,13 +521,18 @@ fn main() -> Result<()> {
                 if proven {
                     for patch in &outcome.patches {
                         templates.insert(
-                            template_key(&patch.impact),
+                            store::key_of_impact(&patch.impact),
                             (
                                 patch.old_line.trim().to_string(),
                                 patch.new_line.trim().to_string(),
                             ),
                         );
                     }
+                    let checks: Vec<String> = verdict
+                        .as_ref()
+                        .map(|v| v.checks.iter().map(|c| c.name.clone()).collect())
+                        .unwrap_or_default();
+                    let _ = store::record_proven(&outcome.patches, &checks);
                 }
                 let status = if proven {
                     match pr::open_pr(
@@ -482,6 +613,10 @@ fn main() -> Result<()> {
                     println!("firstwatch: proof failed, no PR opened. Your tree is untouched.");
                     std::process::exit(1);
                 }
+                if v.proven {
+                    let checks: Vec<String> = v.checks.iter().map(|c| c.name.clone()).collect();
+                    let _ = store::record_proven(&outcome.patches, &checks);
+                }
                 Some(v)
             };
             pr::open_pr(
@@ -543,16 +678,6 @@ fn synthesize_refused(root: &Path, outcome: &mut firstwatch_mend::MendOutcome) -
     Ok(())
 }
 
-fn template_key(impact: &Impact) -> String {
-    format!(
-        "{}|{}|{:?}|{}",
-        impact.change.provider,
-        impact.change.surface,
-        impact.change.kind,
-        impact.change.field.as_deref().unwrap_or("")
-    )
-}
-
 /// Cross-repo fix propagation: a patch proven in one repo becomes the
 /// template for the same change elsewhere in the fleet. A refusal whose
 /// site line matches a template's old line (modulo indentation) is
@@ -569,7 +694,8 @@ fn propagate(
     let mut remaining = Vec::new();
     let mut count = 0;
     for refusal in outcome.refusals.drain(..) {
-        let Some((old_line, new_line)) = templates.get(&template_key(&refusal.impact)) else {
+        let Some((old_line, new_line)) = templates.get(&store::key_of_impact(&refusal.impact))
+        else {
             remaining.push(refusal);
             continue;
         };

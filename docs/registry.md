@@ -88,6 +88,23 @@ firstwatch fix <repo> --events ... --recipes registry/<p>/recipes.ndjson
 A good contribution comes with a minimal example file in `examples/` that the
 feed lights up, so reviewers can run it and see the impacts.
 
+## Sharing graph data
+
+Nothing is ever uploaded automatically. Two kinds of data are worth
+contributing, both by pull request:
+
+```
+firstwatch share            # anonymized usage edges from a scan:
+                            # provider, surface, language, count only
+firstwatch share --proven   # fixes that passed your prove gate
+```
+
+Usage edges land in `usage.ndjson` and power `blast --usage`, the
+ecosystem-wide answer to "who breaks if this ships". Proven fixes are
+reused by every install: when a fix for a change has been proven once,
+`fix` and `fleet` apply it as a template instead of synthesizing again,
+and every repo still runs its own proof.
+
 ## For API providers: publish your own changefeed
 
 Providers do not need to wait for the community. Drop the publish action into

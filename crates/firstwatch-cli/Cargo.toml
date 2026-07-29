@@ -21,3 +21,6 @@ firstwatch-llm = { path = "../firstwatch-llm" }
 anyhow.workspace = true
 serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"

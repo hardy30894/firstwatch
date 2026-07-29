@@ -1,0 +1,8 @@
+{"schema_version":"0.1","provider":"openai","surface":"chat.completions.create","language":"typescript","count":1}
+{"schema_version":"0.1","provider":"openai","surface":"embeddings.create","language":"typescript","count":1}
+{"schema_version":"0.1","provider":"stripe","surface":"charges.create","language":"python","count":1}
+{"schema_version":"0.1","provider":"stripe","surface":"charges.create","language":"typescript","count":1}
+{"schema_version":"0.1","provider":"stripe","surface":"customers.list","language":"typescript","count":1}
+{"schema_version":"0.1","provider":"stripe","surface":"invoices.create","language":"typescript","count":1}
+{"schema_version":"0.1","provider":"stripe","surface":"orders.create","language":"python","count":1}
+{"schema_version":"0.1","provider":"stripe","surface":"orders.create","language":"typescript","count":1}
