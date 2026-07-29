@@ -1,0 +1,19 @@
+[package]
+name = "firstwatch-cli"
+description = "The firstwatch binary."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "firstwatch"
+path = "src/main.rs"
+
+[dependencies]
+firstwatch-schema = { path = "../firstwatch-schema" }
+firstwatch-scan = { path = "../firstwatch-scan" }
+firstwatch-match = { path = "../firstwatch-match" }
+anyhow.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }

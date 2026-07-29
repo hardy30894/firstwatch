@@ -1,0 +1,3 @@
+{"schema_version":"0.1","provider":"stripe","surface":"charges.create","kind":"deprecated","to":"payment_intents.create","effective_version":"2026-06-30","confidence":"high","source":"changelog","evidence_url":"https://docs.stripe.com/changelog"}
+{"schema_version":"0.1","provider":"stripe","surface":"orders.create","kind":"removed","effective_version":"2024-04-10","confidence":"high","source":"openapi_diff","evidence_url":"https://docs.stripe.com/changelog"}
+{"schema_version":"0.1","provider":"stripe","surface":"invoices.create","field":"auto_advance","kind":"type_changed","from":"boolean default true","to":"boolean default false","effective_version":"2025-03-31","confidence":"medium","source":"changelog"}

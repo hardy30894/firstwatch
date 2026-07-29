@@ -1,0 +1,10 @@
+[package]
+name = "firstwatch-match"
+description = "Pure join of ChangeEvents against UsageSites, producing Impacts."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+firstwatch-schema = { path = "../firstwatch-schema" }
