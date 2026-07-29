@@ -28,9 +28,10 @@ stripe/openapi history, install.sh, CI, release workflow, GitHub Action.
   zero core changes via the data-driven provider table)
 - Done: Node and Python bindings, thin JSON contracts over scan, match,
   and diff, mend and prove stay CLI-only
+- Done: community contribution docs for changefeeds, recipes, and
+  providers (docs/registry.md), plus the provider publish action
 - Blocked on launch chores: split firstwatch-schema and
   firstwatch-registry into their own repos, spec v1
-- Community contribution docs for changefeeds and recipes
 
 ## v0.4, agent tier and provider variant, done
 
