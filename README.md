@@ -53,13 +53,48 @@ Changefeeds describe what changed upstream. Ready-made feeds for Stripe, OpenAI,
 
 ## When you reach for it
 
-**You have an API version upgrade in front of you.** Your vendor publishes an OpenAPI spec. Diff the old and new versions with `watch`, see exactly which of your files and lines the changes hit with `check`, and let `fix` handle the mechanical parts with proof. No registry needed; you bring the two specs.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-**You own an internal API that other teams consume.** On every release: `watch` the spec change, `blast` across the consuming repos to see who breaks before you merge, `fleet` to open fix PRs at all of them. The whole loop runs on your own specs and repos.
+**An API upgrade is in front of you**
 
-**You never want to be surprised again.** Put the [Action](#run-it-in-ci) in CI and the build fails the moment an upstream change hits your code, instead of production finding out.
+Your vendor publishes an OpenAPI spec. Diff the old and new versions, see exactly which of your files and lines the changes hit, and fix the mechanical parts with proof. No registry needed; you bring the two specs.
 
-**The vendor announced changes in prose.** `changelog` turns the release notes into structured events, and `check` grounds them against your actual call sites: here are the six lines this announcement might affect.
+`watch` → `check` → `fix --write`
+
+</td>
+<td width="50%" valign="top">
+
+**You own an API other teams consume**
+
+On every release, see who breaks before you merge, then open fix PRs at every consuming repo. The whole loop runs on your own specs and repos.
+
+`watch` → `blast` → `fleet`
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**You never want to be surprised again**
+
+Put the [Action](#run-it-in-ci) in CI and the build fails the moment an upstream change hits your code, instead of production finding out.
+
+`check`, on every build
+
+</td>
+<td width="50%" valign="top">
+
+**The vendor announced changes in prose**
+
+Turn the release notes into structured events and ground them against your actual call sites: here are the six lines this announcement might affect.
+
+`changelog` → `check`
+
+</td>
+</tr>
+</table>
 
 ## Commands
 
