@@ -15,7 +15,7 @@ The APIs your code depends on change without asking. Endpoints get removed, para
   <img alt="firstwatch end to end: upstream spec diffs and release notes become a changefeed; your repo is scanned for call sites; match finds who breaks; mend proposes fixes in three tiers; prove runs your typecheck, tests, and replay in a staged copy; passing patches are applied or opened as a PR, everything else is refused with the reason" src="docs/flow.svg" width="100%">
 </picture>
 
-**Contents**: [Install](#install) · [Quick start](#quick-start) · [Commands](#commands) · [The proof gate](#the-proof-gate) · [How fixes work](#how-fixes-work) · [Bring your own model](#bring-your-own-model) · [Many repos](#many-repos) · [CI and providers](#run-it-in-ci) · [Going deeper](#going-deeper)
+**Contents**: [Install](#install) · [Quick start](#quick-start) · [When you reach for it](#when-you-reach-for-it) · [Commands](#commands) · [The proof gate](#the-proof-gate) · [How fixes work](#how-fixes-work) · [Bring your own model](#bring-your-own-model) · [Many repos](#many-repos) · [CI and providers](#run-it-in-ci) · [Going deeper](#going-deeper)
 
 ## Install
 
@@ -50,6 +50,16 @@ firstwatch pr  --events registry/stripe/changefeed.ndjson            # same, as 
 ```
 
 Changefeeds describe what changed upstream. Ready-made feeds for Stripe, OpenAI, and GitHub ship in [`registry/`](registry/), or make your own from any two OpenAPI specs or a release-notes page (see [Commands](#commands)).
+
+## When you reach for it
+
+**You have an API version upgrade in front of you.** Your vendor publishes an OpenAPI spec. Diff the old and new versions with `watch`, see exactly which of your files and lines the changes hit with `check`, and let `fix` handle the mechanical parts with proof. No registry needed; you bring the two specs.
+
+**You own an internal API that other teams consume.** On every release: `watch` the spec change, `blast` across the consuming repos to see who breaks before you merge, `fleet` to open fix PRs at all of them. The whole loop runs on your own specs and repos.
+
+**You never want to be surprised again.** Put the [Action](#run-it-in-ci) in CI and the build fails the moment an upstream change hits your code, instead of production finding out.
+
+**The vendor announced changes in prose.** `changelog` turns the release notes into structured events, and `check` grounds them against your actual call sites: here are the six lines this announcement might affect.
 
 ## Commands
 
