@@ -45,6 +45,15 @@ enum Command {
         #[arg(long)]
         events: PathBuf,
     },
+    /// Propose deterministic fixes for impacted call sites. Dry run unless --write.
+    Fix {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        events: PathBuf,
+        #[arg(long)]
+        write: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -74,6 +83,40 @@ fn main() -> Result<()> {
             let sites = firstwatch_scan::scan_dir(&path)?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             report(&impacts, sites.len());
+        }
+        Command::Fix { path, events, write } => {
+            let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
+            let sites = firstwatch_scan::scan_dir(&path)?;
+            let impacts = firstwatch_match::match_impacts(&events, &sites);
+            let outcome = firstwatch_mend::mend(&path, &impacts)?;
+            for patch in &outcome.patches {
+                println!("{}:{}", patch.file, patch.line);
+                println!("- {}", patch.old_line.trim());
+                println!("+ {}", patch.new_line.trim());
+            }
+            for refusal in &outcome.refusals {
+                println!(
+                    "[refused] {}:{} {} ({})",
+                    refusal.impact.site.file,
+                    refusal.impact.site.line,
+                    refusal.impact.site.surface,
+                    refusal.reason
+                );
+            }
+            if write {
+                let applied = firstwatch_mend::apply(&path, &outcome.patches)?;
+                println!(
+                    "firstwatch: applied {applied} of {} proposed patches, {} refused. Run your tests.",
+                    outcome.patches.len(),
+                    outcome.refusals.len()
+                );
+            } else {
+                println!(
+                    "firstwatch: {} patches proposed, {} refused. Re-run with --write to apply.",
+                    outcome.patches.len(),
+                    outcome.refusals.len()
+                );
+            }
         }
     }
     Ok(())

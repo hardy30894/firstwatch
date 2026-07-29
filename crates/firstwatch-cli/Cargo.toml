@@ -15,6 +15,7 @@ firstwatch-schema = { path = "../firstwatch-schema" }
 firstwatch-watch = { path = "../firstwatch-watch" }
 firstwatch-scan = { path = "../firstwatch-scan" }
 firstwatch-match = { path = "../firstwatch-match" }
+firstwatch-mend = { path = "../firstwatch-mend" }
 anyhow.workspace = true
 serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }

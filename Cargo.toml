@@ -5,6 +5,7 @@ members = [
     "crates/firstwatch-watch",
     "crates/firstwatch-scan",
     "crates/firstwatch-match",
+    "crates/firstwatch-mend",
     "crates/firstwatch-cli",
 ]
 

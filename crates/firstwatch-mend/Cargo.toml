@@ -1,0 +1,11 @@
+[package]
+name = "firstwatch-mend"
+description = "Tier 1 patch generation: deterministic rewrites with preconditions. Proposes, never guesses."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+firstwatch-schema = { path = "../firstwatch-schema" }
+anyhow.workspace = true

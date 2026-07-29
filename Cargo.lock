@@ -142,6 +142,7 @@ dependencies = [
  "anyhow",
  "clap",
  "firstwatch-match",
+ "firstwatch-mend",
  "firstwatch-scan",
  "firstwatch-schema",
  "firstwatch-watch",
@@ -152,6 +153,14 @@ dependencies = [
 name = "firstwatch-match"
 version = "0.1.0"
 dependencies = [
+ "firstwatch-schema",
+]
+
+[[package]]
+name = "firstwatch-mend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "firstwatch-schema",
 ]
 
