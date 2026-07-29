@@ -30,7 +30,7 @@ impl Verdict {
     }
 }
 
-/// Detects verifiers the project already has. Typecheck only for now;
+/// Detects verifiers the project already has. Typecheck only by default;
 /// test suites are opt-in at the CLI because they can be arbitrarily slow.
 pub fn detect_verifiers(root: &Path) -> Vec<Verifier> {
     let mut verifiers = Vec::new();
@@ -48,6 +48,91 @@ pub fn detect_verifiers(root: &Path) -> Vec<Verifier> {
         });
     }
     verifiers
+}
+
+pub fn detect_test_verifiers(root: &Path) -> Vec<Verifier> {
+    let mut verifiers = Vec::new();
+    if let Ok(pkg) = std::fs::read_to_string(root.join("package.json")) {
+        let has_real_test_script = serde_json::from_str::<serde_json::Value>(&pkg)
+            .ok()
+            .and_then(|v| {
+                v.pointer("/scripts/test")
+                    .and_then(|s| s.as_str().map(String::from))
+            })
+            .is_some_and(|s| !s.contains("no test specified"));
+        if has_real_test_script {
+            verifiers.push(Verifier {
+                name: "tests (npm test)".into(),
+                program: "npm".into(),
+                args: vec!["test".into(), "--silent".into()],
+            });
+        }
+    }
+    if root.join("pytest.ini").exists()
+        || root.join("conftest.py").exists()
+        || std::fs::read_to_string(root.join("pyproject.toml"))
+            .is_ok_and(|s| s.contains("[tool.pytest"))
+    {
+        verifiers.push(Verifier {
+            name: "tests (pytest)".into(),
+            program: "pytest".into(),
+            args: vec!["-q".into()],
+        });
+    }
+    verifiers
+}
+
+/// Differential replay: runs the same command in an unpatched staging and
+/// a patched staging, then requires identical exit status and stdout.
+/// The command should exercise the impacted code deterministically,
+/// against fixtures or a sandbox.
+pub fn replay(root: &Path, patches: &[PatchCandidate], cmd: &str) -> Result<Check> {
+    let baseline_dir = tempfile::tempdir().context("creating baseline staging")?;
+    stage_repo(root, baseline_dir.path())?;
+    let patched_dir = tempfile::tempdir().context("creating patched staging")?;
+    stage_repo(root, patched_dir.path())?;
+    firstwatch_mend::apply(patched_dir.path(), patches)?;
+
+    let baseline = run_shell(cmd, baseline_dir.path())?;
+    let patched = run_shell(cmd, patched_dir.path())?;
+
+    let passed = baseline.0 && patched.0 && baseline.1 == patched.1;
+    let output_tail = if passed {
+        String::new()
+    } else if !baseline.0 {
+        format!("baseline run failed:\n{}", tail(&baseline.1))
+    } else if !patched.0 {
+        format!("patched run failed:\n{}", tail(&patched.1))
+    } else {
+        format!(
+            "output diverged\nbaseline:\n{}\npatched:\n{}",
+            tail(&baseline.1),
+            tail(&patched.1)
+        )
+    };
+    Ok(Check {
+        name: format!("replay ({cmd})"),
+        passed,
+        output_tail,
+    })
+}
+
+fn run_shell(cmd: &str, dir: &Path) -> Result<(bool, String)> {
+    let output = Command::new("sh")
+        .args(["-c", cmd])
+        .current_dir(dir)
+        .output()
+        .with_context(|| format!("running replay command: {cmd}"))?;
+    let combined = [output.stdout, output.stderr].concat();
+    Ok((
+        output.status.success(),
+        String::from_utf8_lossy(&combined).into_owned(),
+    ))
+}
+
+fn tail(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().rev().take(10).collect();
+    lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
 /// Stages the repo in a temp dir, applies the patches there, runs every
@@ -189,6 +274,34 @@ mod tests {
         .unwrap();
         assert!(!verdict.proven);
         assert!(verdict.checks[0].output_tail.contains("type error"));
+    }
+
+    #[test]
+    fn replay_passes_when_output_is_identical() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.ts"), "unrelated line\n").unwrap();
+        std::fs::write(dir.path().join("out.txt"), "same\n").unwrap();
+        let check = replay(
+            dir.path(),
+            &[patch("a.ts", "unrelated line", "still unrelated")],
+            "cat out.txt",
+        )
+        .unwrap();
+        assert!(check.passed);
+    }
+
+    #[test]
+    fn replay_fails_when_output_diverges() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.ts"), "old line\n").unwrap();
+        let check = replay(
+            dir.path(),
+            &[patch("a.ts", "old line", "new line")],
+            "cat a.ts",
+        )
+        .unwrap();
+        assert!(!check.passed);
+        assert!(check.output_tail.contains("output diverged"));
     }
 
     #[test]

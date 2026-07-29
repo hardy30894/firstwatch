@@ -60,6 +60,13 @@ enum Command {
         /// Recipe ndjson file with provider-authored fixes.
         #[arg(long)]
         recipes: Option<PathBuf>,
+        /// Also run the project's test suite as a verifier.
+        #[arg(long)]
+        with_tests: bool,
+        /// Differential replay command, run in unpatched and patched
+        /// stagings, requiring identical output.
+        #[arg(long)]
+        replay: Option<String>,
         #[arg(long)]
         write: bool,
     },
@@ -72,6 +79,13 @@ enum Command {
         /// Recipe ndjson file with provider-authored fixes.
         #[arg(long)]
         recipes: Option<PathBuf>,
+        /// Also run the project's test suite as a verifier.
+        #[arg(long)]
+        with_tests: bool,
+        /// Differential replay command, run in unpatched and patched
+        /// stagings, requiring identical output.
+        #[arg(long)]
+        replay: Option<String>,
         #[arg(long)]
         branch: Option<String>,
         #[arg(long)]
@@ -114,6 +128,8 @@ fn main() -> Result<()> {
             path,
             events,
             recipes,
+            with_tests,
+            replay,
             write,
         } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
@@ -150,15 +166,26 @@ fn main() -> Result<()> {
                 );
                 return Ok(());
             }
-            let verifiers = firstwatch_prove::detect_verifiers(&path);
-            if verifiers.is_empty() {
+            let mut verifiers = firstwatch_prove::detect_verifiers(&path);
+            if with_tests {
+                verifiers.extend(firstwatch_prove::detect_test_verifiers(&path));
+            }
+            if verifiers.is_empty() && replay.is_none() {
                 let applied = firstwatch_mend::apply(&path, &outcome.patches)?;
                 println!(
                     "firstwatch: applied {applied} patches UNPROVEN, no verifiers detected. Run your tests.",
                 );
                 return Ok(());
             }
-            let verdict = firstwatch_prove::prove(&path, &outcome.patches, &verifiers)?;
+            let mut verdict = firstwatch_prove::prove(&path, &outcome.patches, &verifiers)?;
+            if let Some(cmd) = &replay {
+                let check = firstwatch_prove::replay(&path, &outcome.patches, cmd)?;
+                verdict.proven = verdict.proven && check.passed;
+                verdict.checks.push(check);
+                if verdict.checks.len() == 1 {
+                    verdict.proven = verdict.checks[0].passed;
+                }
+            }
             for check in &verdict.checks {
                 let status = if check.passed { "ok" } else { "FAILED" };
                 println!("[prove] {} {status}", check.name);
@@ -184,6 +211,8 @@ fn main() -> Result<()> {
             path,
             events,
             recipes,
+            with_tests,
+            replay,
             branch,
             draft,
             allow_unproven,
@@ -200,11 +229,23 @@ fn main() -> Result<()> {
                 );
                 return Ok(());
             }
-            let verifiers = firstwatch_prove::detect_verifiers(&path);
-            let verdict = if verifiers.is_empty() {
+            let mut verifiers = firstwatch_prove::detect_verifiers(&path);
+            if with_tests {
+                verifiers.extend(firstwatch_prove::detect_test_verifiers(&path));
+            }
+            let verdict = if verifiers.is_empty() && replay.is_none() {
                 None
             } else {
-                let v = firstwatch_prove::prove(&path, &outcome.patches, &verifiers)?;
+                let mut v = firstwatch_prove::prove(&path, &outcome.patches, &verifiers)?;
+                if let Some(cmd) = &replay {
+                    let check = firstwatch_prove::replay(&path, &outcome.patches, cmd)?;
+                    if v.checks.is_empty() {
+                        v.proven = check.passed;
+                    } else {
+                        v.proven = v.proven && check.passed;
+                    }
+                    v.checks.push(check);
+                }
                 for check in &v.checks {
                     let status = if check.passed { "ok" } else { "FAILED" };
                     println!("[prove] {} {status}", check.name);

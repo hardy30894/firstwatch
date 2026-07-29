@@ -10,5 +10,6 @@ repository.workspace = true
 firstwatch-schema = { path = "../firstwatch-schema" }
 firstwatch-mend = { path = "../firstwatch-mend" }
 anyhow.workspace = true
+serde_json.workspace = true
 walkdir = "2"
 tempfile = "3"

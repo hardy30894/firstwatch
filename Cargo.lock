@@ -200,6 +200,7 @@ dependencies = [
  "anyhow",
  "firstwatch-mend",
  "firstwatch-schema",
+ "serde_json",
  "tempfile",
  "walkdir",
 ]
