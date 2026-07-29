@@ -1,6 +1,12 @@
-# firstwatch
+<div align="center">
 
-First eyes on upstream API changes.
+<img alt="firstwatch" src="docs/logo.png" width="340">
+
+**First eyes on upstream API changes.**
+
+[![every patch proven](https://img.shields.io/badge/every%20patch-proven%20before%20write-2E7D32?style=flat-square)](#nothing-ships-without-proof) [![refusals first class](https://img.shields.io/badge/can%27t%20prove%20it-refused%2C%20with%20reason-3557C4?style=flat-square)](#nothing-ships-without-proof) [![bring your own model](https://img.shields.io/badge/model-bring%20your%20own-8A2BE2?style=flat-square)](#bring-your-own-model) [![tests passing](https://img.shields.io/badge/tests-passing-2E7D32?style=flat-square)](#build) [![Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-6A6F7A?style=flat-square)](#license)
+
+</div>
 
 The APIs your code depends on change without asking: endpoints get removed, parameters get renamed, defaults flip. Firstwatch finds the exact call sites a change hits, fixes what it can prove safe, and refuses the rest with a reason. It never guesses, and it never touches your tree without proof.
 
