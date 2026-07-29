@@ -1,36 +1,21 @@
-use std::collections::HashSet;
+mod py;
+mod ts;
+
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use firstwatch_schema::{UsageSite, SCHEMA_VERSION};
-use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
+use firstwatch_schema::UsageSite;
 use walkdir::WalkDir;
-
-const CALL_QUERY: &str = r#"
-(call_expression
-  function: (member_expression
-    object: (member_expression
-      object: (identifier) @root
-      property: (property_identifier) @group)
-    property: (property_identifier) @method))
-"#;
-
-const BINDING_QUERY: &str = r#"
-(variable_declarator
-  name: (identifier) @name
-  value: (new_expression constructor: (identifier) @ctor))
-"#;
 
 pub fn scan_dir(root: &Path) -> Result<Vec<UsageSite>> {
     let mut sites = Vec::new();
-    for entry in WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|e| e.file_name() != "node_modules" && e.file_name() != ".git")
-    {
+    for entry in WalkDir::new(root).into_iter().filter_entry(|e| {
+        let name = e.file_name().to_string_lossy();
+        name != "node_modules" && name != ".git" && name != ".venv" && name != "__pycache__"
+    }) {
         let entry = entry?;
         let path = entry.path();
-        let ext = path.extension().and_then(|e| e.to_str());
-        if !matches!(ext, Some("ts") | Some("tsx") | Some("js") | Some("mjs")) {
+        if !entry.file_type().is_file() || !is_supported(path) {
             continue;
         }
         let source =
@@ -42,76 +27,22 @@ pub fn scan_dir(root: &Path) -> Result<Vec<UsageSite>> {
 }
 
 pub fn scan_source(source: &str, file: &str) -> Result<Vec<UsageSite>> {
-    let language = tree_sitter::Language::new(tree_sitter_typescript::LANGUAGE_TYPESCRIPT);
-    let mut parser = Parser::new();
-    parser.set_language(&language)?;
-    let tree = parser
-        .parse(source, None)
-        .context("tree-sitter failed to parse")?;
-    let src = source.as_bytes();
-
-    let binding_query = Query::new(&language, BINDING_QUERY)?;
-    let mut stripe_vars: HashSet<String> = HashSet::new();
-    let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&binding_query, tree.root_node(), src);
-    while let Some(m) = matches.next() {
-        let mut name = None;
-        let mut ctor = None;
-        for cap in m.captures {
-            let text = cap.node.utf8_text(src)?;
-            match binding_query.capture_names()[cap.index as usize] {
-                "name" => name = Some(text.to_string()),
-                "ctor" => ctor = Some(text.to_string()),
-                _ => {}
-            }
-        }
-        if ctor.as_deref() == Some("Stripe") {
-            if let Some(name) = name {
-                stripe_vars.insert(name);
-            }
-        }
+    match extension(file) {
+        Some("py") => py::scan(source, file),
+        Some("ts") | Some("tsx") | Some("js") | Some("mjs") => ts::scan(source, file),
+        _ => Ok(Vec::new()),
     }
+}
 
-    let call_query = Query::new(&language, CALL_QUERY)?;
-    let mut sites = Vec::new();
-    let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&call_query, tree.root_node(), src);
-    while let Some(m) = matches.next() {
-        let mut root = None;
-        let mut group = None;
-        let mut method = None;
-        let mut position = None;
-        for cap in m.captures {
-            let text = cap.node.utf8_text(src)?;
-            match call_query.capture_names()[cap.index as usize] {
-                "root" => {
-                    root = Some(text.to_string());
-                    position = Some(cap.node.start_position());
-                }
-                "group" => group = Some(text.to_string()),
-                "method" => method = Some(text.to_string()),
-                _ => {}
-            }
-        }
-        let (Some(root), Some(group), Some(method), Some(pos)) = (root, group, method, position)
-        else {
-            continue;
-        };
-        if !stripe_vars.contains(&root) && root.to_lowercase() != "stripe" {
-            continue;
-        }
-        sites.push(UsageSite {
-            schema_version: SCHEMA_VERSION.into(),
-            provider: "stripe".into(),
-            surface: format!("{group}.{method}"),
-            file: file.to_string(),
-            line: pos.row + 1,
-            column: pos.column + 1,
-            language: "typescript".into(),
-            snippet: source.lines().nth(pos.row).map(|l| l.trim().to_string()),
-        });
-    }
-    Ok(sites)
+fn is_supported(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("py") | Some("ts") | Some("tsx") | Some("js") | Some("mjs")
+    )
+}
+
+fn extension(file: &str) -> Option<&str> {
+    Path::new(file).extension().and_then(|e| e.to_str())
 }
 
 #[cfg(test)]
@@ -146,6 +77,20 @@ const db = new Pool(cfg);
 await db.users.findMany({});
 "#;
         let sites = scan_source(src, "a.ts").unwrap();
+        assert!(sites.is_empty());
+    }
+
+    #[test]
+    fn dispatches_python_by_extension() {
+        let src = "client = StripeClient(key)\nclient.charges.retrieve(id)\n";
+        let sites = scan_source(src, "app.py").unwrap();
+        assert_eq!(sites.len(), 1);
+        assert_eq!(sites[0].language, "python");
+    }
+
+    #[test]
+    fn unknown_extension_is_empty() {
+        let sites = scan_source("stripe.charges.create()", "notes.txt").unwrap();
         assert!(sites.is_empty());
     }
 }
