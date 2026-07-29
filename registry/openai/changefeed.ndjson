@@ -1,0 +1,3 @@
+{"schema_version":"0.1","provider":"openai","surface":"chat.completions.create","kind":"deprecated","to":"responses.create","confidence":"high","source":"changelog","evidence_url":"https://platform.openai.com/docs/guides/migrate-to-responses"}
+{"schema_version":"0.1","provider":"openai","surface":"completions.create","kind":"deprecated","to":"responses.create","confidence":"high","source":"changelog","evidence_url":"https://platform.openai.com/docs/deprecations"}
+{"schema_version":"0.1","provider":"openai","surface":"responses.create","kind":"added","confidence":"high","source":"changelog","evidence_url":"https://platform.openai.com/docs/api-reference/responses"}

@@ -1,0 +1,1 @@
+{"schema_version":"0.1","provider":"openai","surface":"chat.completions.create","kind":"deprecated","steps":[{"op":"rename_surface","to":"responses.create"},{"op":"rename_field","from":"messages","to":"input","optional":true}]}

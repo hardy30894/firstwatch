@@ -1,3 +1,4 @@
+mod providers;
 mod py;
 mod ts;
 
@@ -78,6 +79,19 @@ await db.users.findMany({});
 "#;
         let sites = scan_source(src, "a.ts").unwrap();
         assert!(sites.is_empty());
+    }
+
+    #[test]
+    fn finds_deep_openai_chains_in_typescript() {
+        let src = r#"
+import OpenAI from "openai";
+const client = new OpenAI();
+const r = await client.chat.completions.create({ model, messages });
+"#;
+        let sites = scan_source(src, "ai.ts").unwrap();
+        assert_eq!(sites.len(), 1);
+        assert_eq!(sites[0].provider, "openai");
+        assert_eq!(sites[0].surface, "chat.completions.create");
     }
 
     #[test]

@@ -1,17 +1,12 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use firstwatch_schema::{UsageSite, SCHEMA_VERSION};
-use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
+use tree_sitter::{Node, Parser, Query, QueryCursor, StreamingIterator};
 
-const CALL_QUERY: &str = r#"
-(call
-  function: (attribute
-    object: (attribute
-      object: (identifier) @root
-      attribute: (identifier) @group)
-    attribute: (identifier) @method))
-"#;
+use crate::providers;
+
+const CALL_QUERY: &str = "(call function: (attribute) @fn)";
 
 const BINDING_QUERY: &str = r#"
 (assignment
@@ -29,7 +24,7 @@ pub fn scan(source: &str, file: &str) -> Result<Vec<UsageSite>> {
     let src = source.as_bytes();
 
     let binding_query = Query::new(&language, BINDING_QUERY)?;
-    let mut client_vars: HashSet<String> = HashSet::new();
+    let mut bound_vars: HashMap<String, &'static str> = HashMap::new();
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&binding_query, tree.root_node(), src);
     while let Some(m) = matches.next() {
@@ -43,9 +38,9 @@ pub fn scan(source: &str, file: &str) -> Result<Vec<UsageSite>> {
                 _ => {}
             }
         }
-        if ctor.as_deref() == Some("StripeClient") {
-            if let Some(name) = name {
-                client_vars.insert(name);
+        if let (Some(name), Some(ctor)) = (name, ctor) {
+            if let Some(provider) = providers::by_constructor(&ctor) {
+                bound_vars.insert(name, provider.name);
             }
         }
     }
@@ -55,47 +50,52 @@ pub fn scan(source: &str, file: &str) -> Result<Vec<UsageSite>> {
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&call_query, tree.root_node(), src);
     while let Some(m) = matches.next() {
-        let mut root = None;
-        let mut group = None;
-        let mut method = None;
-        let mut position = None;
         for cap in m.captures {
-            let text = cap.node.utf8_text(src)?;
-            match call_query.capture_names()[cap.index as usize] {
-                "root" => {
-                    root = Some(text.to_string());
-                    position = Some(cap.node.start_position());
-                }
-                "group" => group = Some(text.to_string()),
-                "method" => method = Some(text.to_string()),
-                _ => {}
+            let Some((root, mut chain, node)) = attribute_chain(cap.node, src) else {
+                continue;
+            };
+            if chain.len() < 2 {
+                continue;
             }
+            let bound = bound_vars.get(&root).copied();
+            let provider = bound.or_else(|| providers::by_root(&root).map(|p| p.name));
+            let Some(provider) = provider else { continue };
+            if bound.is_none() && chain[0].starts_with(char::is_uppercase) {
+                chain[0] = legacy_resource(&chain[0]);
+            }
+            let pos = node.start_position();
+            sites.push(UsageSite {
+                schema_version: SCHEMA_VERSION.into(),
+                provider: provider.into(),
+                surface: chain.join("."),
+                file: file.to_string(),
+                line: pos.row + 1,
+                column: pos.column + 1,
+                language: "python".into(),
+                snippet: source.lines().nth(pos.row).map(|l| l.trim().to_string()),
+            });
         }
-        let (Some(root), Some(group), Some(method), Some(pos)) = (root, group, method, position)
-        else {
-            continue;
-        };
-        let surface = if client_vars.contains(&root) {
-            format!("{group}.{method}")
-        } else if root == "stripe" && group.starts_with(char::is_uppercase) {
-            format!("{}.{method}", legacy_resource(&group))
-        } else if root == "stripe" || root == "client" {
-            format!("{group}.{method}")
-        } else {
-            continue;
-        };
-        sites.push(UsageSite {
-            schema_version: SCHEMA_VERSION.into(),
-            provider: "stripe".into(),
-            surface,
-            file: file.to_string(),
-            line: pos.row + 1,
-            column: pos.column + 1,
-            language: "python".into(),
-            snippet: source.lines().nth(pos.row).map(|l| l.trim().to_string()),
-        });
     }
     Ok(sites)
+}
+
+fn attribute_chain<'a>(node: Node<'a>, src: &[u8]) -> Option<(String, Vec<String>, Node<'a>)> {
+    let mut chain = Vec::new();
+    let mut current = node;
+    loop {
+        let attr = current.child_by_field_name("attribute")?;
+        chain.push(attr.utf8_text(src).ok()?.to_string());
+        let object = current.child_by_field_name("object")?;
+        match object.kind() {
+            "attribute" => current = object,
+            "identifier" => {
+                chain.reverse();
+                let root = object.utf8_text(src).ok()?.to_string();
+                return Some((root, chain, object));
+            }
+            _ => return None,
+        }
+    }
 }
 
 /// Maps legacy stripe-python class names to modern surfaces:
@@ -126,8 +126,8 @@ mod tests {
             "client = StripeClient(key)\nintent = client.payment_intents.create(amount=100)\n";
         let sites = scan(src, "billing.py").unwrap();
         assert_eq!(sites.len(), 1);
+        assert_eq!(sites[0].provider, "stripe");
         assert_eq!(sites[0].surface, "payment_intents.create");
-        assert_eq!(sites[0].language, "python");
         assert_eq!(sites[0].line, 2);
     }
 
@@ -138,6 +138,25 @@ mod tests {
         assert_eq!(sites.len(), 2);
         assert_eq!(sites[0].surface, "charges.create");
         assert_eq!(sites[1].surface, "payment_intents.create");
+    }
+
+    #[test]
+    fn finds_openai_client_calls() {
+        let src =
+            "client = OpenAI()\nresp = client.chat.completions.create(model=m, messages=msgs)\n";
+        let sites = scan(src, "app.py").unwrap();
+        assert_eq!(sites.len(), 1);
+        assert_eq!(sites[0].provider, "openai");
+        assert_eq!(sites[0].surface, "chat.completions.create");
+    }
+
+    #[test]
+    fn finds_openai_module_calls() {
+        let src = "import openai\nresp = openai.embeddings.create(input=text)\n";
+        let sites = scan(src, "app.py").unwrap();
+        assert_eq!(sites.len(), 1);
+        assert_eq!(sites[0].provider, "openai");
+        assert_eq!(sites[0].surface, "embeddings.create");
     }
 
     #[test]
