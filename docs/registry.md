@@ -103,7 +103,9 @@ Usage edges land in `usage.ndjson` and power `blast --usage`, the
 ecosystem-wide answer to "who breaks if this ships". Proven fixes are
 reused by every install: when a fix for a change has been proven once,
 `fix` and `fleet` apply it as a template instead of synthesizing again,
-and every repo still runs its own proof.
+and every repo still runs its own proof. Your local store lives at
+`~/.firstwatch/proven.ndjson` (`FIRSTWATCH_HOME` overrides the
+directory).
 
 ## For API providers: publish your own changefeed
 

@@ -103,6 +103,16 @@ The tool is the engine; the registry is the fuel, and it is community-shaped on 
 
 `fleet` runs the full pipeline per repo and opens PRs. Its interesting property is propagation: when a patch is proven in one repo, that exact rewrite becomes the template for the same change in every later repo, re-indented per site and still proven per repo. With `--llm`, this means each unique change is synthesized at most once per run, no matter how many repos are affected. The fleet gets cheaper and more reliable as it runs.
 
+## The graph: solving each change once, ecosystem-wide
+
+Normal operation produces graph-shaped data as a byproduct, in two record types that were in the schema from day one.
+
+**Proven fixes.** Every patch that passes the prove gate is recorded to a local store (`~/.firstwatch/proven.ndjson`; `FIRSTWATCH_HOME` overrides the directory) as a ProvenFix: the change identity, the trimmed old and new lines, and the checks that proved it. Later runs of `fix` and `fleet` load the store and reuse matching fixes as templates before trying anything else, so a change solved once on your machine is never synthesized again. `firstwatch share --proven` dumps the store for contribution; a fix proven by one person becomes a template for everyone, and every repo that receives it still runs its own proof.
+
+**Usage edges.** `firstwatch share` aggregates a scan into UsageEdges: provider, surface, language, count, and structurally nothing else. No file paths and no repo names, so the record is anonymous by construction rather than by scrubbing. Shared edges accumulate in the registry and power `blast --usage`, which answers the ecosystem-wide question with no repos at hand: this change breaks this many known call sites, in these languages.
+
+Nothing is ever uploaded automatically. Contribution is a pull request you can read before sending. The graph therefore grows the way advisory databases grew: through a schema worth standardizing on and contributions worth trusting, not through telemetry.
+
 ## Where you can plug in
 
 Every extension point is data or an executable. None require touching Rust.

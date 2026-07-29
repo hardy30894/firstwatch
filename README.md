@@ -115,7 +115,7 @@ For internal APIs with custom auth, bring any executable that reads a prompt on 
 export FIRSTWATCH_LLM_CMD=./my-llm-bridge.sh
 ```
 
-Your credentials never enter firstwatch. Whichever model you bring, the proof gate stays the judge.
+Your credentials never enter firstwatch, and bridge commands run under a timeout (`FIRSTWATCH_LLM_TIMEOUT`, default 120s). Whichever model you bring, the proof gate stays the judge.
 
 ## Many repos
 
