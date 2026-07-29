@@ -1,3 +1,5 @@
+mod pr;
+
 use std::fs::File;
 use std::io::{self, BufReader};
 use std::path::PathBuf;
@@ -57,6 +59,20 @@ enum Command {
         events: PathBuf,
         #[arg(long)]
         write: bool,
+    },
+    /// Fix on a new branch, commit, push, and open a PR. Requires a clean worktree.
+    Pr {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        events: PathBuf,
+        #[arg(long)]
+        branch: Option<String>,
+        #[arg(long)]
+        draft: bool,
+        /// Open the PR even when no verifier could prove the patches.
+        #[arg(long)]
+        allow_unproven: bool,
     },
 }
 
@@ -155,6 +171,53 @@ fn main() -> Result<()> {
                 );
                 std::process::exit(1);
             }
+        }
+        Command::Pr {
+            path,
+            events,
+            branch,
+            draft,
+            allow_unproven,
+        } => {
+            let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
+            let sites = firstwatch_scan::scan_dir(&path)?;
+            let impacts = firstwatch_match::match_impacts(&events, &sites);
+            let outcome = firstwatch_mend::mend(&path, &impacts)?;
+            if outcome.patches.is_empty() {
+                println!(
+                    "firstwatch: nothing to patch, {} refused. No PR to open.",
+                    outcome.refusals.len()
+                );
+                return Ok(());
+            }
+            let verifiers = firstwatch_prove::detect_verifiers(&path);
+            let verdict = if verifiers.is_empty() {
+                None
+            } else {
+                let v = firstwatch_prove::prove(&path, &outcome.patches, &verifiers)?;
+                for check in &v.checks {
+                    let status = if check.passed { "ok" } else { "FAILED" };
+                    println!("[prove] {} {status}", check.name);
+                    if !check.passed && !check.output_tail.is_empty() {
+                        println!("{}", check.output_tail);
+                    }
+                }
+                if !v.proven && !allow_unproven {
+                    println!("firstwatch: proof failed, no PR opened. Your tree is untouched.");
+                    std::process::exit(1);
+                }
+                Some(v)
+            };
+            pr::open_pr(
+                pr::PrArgs {
+                    root: &path,
+                    branch,
+                    draft,
+                    allow_unproven,
+                },
+                &outcome,
+                verdict.as_ref(),
+            )?;
         }
     }
     Ok(())

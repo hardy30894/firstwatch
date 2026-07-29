@@ -101,8 +101,9 @@ fn stage_repo(root: &Path, staging: &Path) -> Result<()> {
     }
     let node_modules = root.join("node_modules");
     if node_modules.exists() {
+        let absolute = std::fs::canonicalize(&node_modules)?;
         #[cfg(unix)]
-        std::os::unix::fs::symlink(&node_modules, staging.join("node_modules"))?;
+        std::os::unix::fs::symlink(&absolute, staging.join("node_modules"))?;
     }
     Ok(())
 }
