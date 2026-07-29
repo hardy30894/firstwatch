@@ -24,11 +24,13 @@ stripe/openapi history, install.sh, CI, release workflow, GitHub Action.
 
 ## v0.3, ecosystem
 
-- Second and third providers (OpenAI, GitHub) added through recipes and
-  changefeeds only, no core changes. This is the extensibility test.
-- Split firstwatch-schema and firstwatch-registry into their own repos, spec v1
+- Done: OpenAI (second provider) and GitHub (third, pure registry data,
+  zero core changes via the data-driven provider table)
+- Done: Node and Python bindings, thin JSON contracts over scan, match,
+  and diff, mend and prove stay CLI-only
+- Blocked on launch chores: split firstwatch-schema and
+  firstwatch-registry into their own repos, spec v1
 - Community contribution docs for changefeeds and recipes
-- Node and Python bindings (napi-rs, PyO3)
 
 ## v0.4, agent tier and provider variant
 
