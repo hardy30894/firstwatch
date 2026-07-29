@@ -1,0 +1,7 @@
+{"schema_version":"0.1","provider":"stripe","surface":"terminal.refunds.create","field":"amount","kind":"removed","effective_version":"2026-05-27.dahlia","confidence":"high","source":"openapi_diff"}
+{"schema_version":"0.1","provider":"stripe","surface":"terminal.refunds.create","field":"charge","kind":"removed","effective_version":"2026-05-27.dahlia","confidence":"high","source":"openapi_diff"}
+{"schema_version":"0.1","provider":"stripe","surface":"terminal.refunds.create","field":"metadata","kind":"removed","effective_version":"2026-05-27.dahlia","confidence":"high","source":"openapi_diff"}
+{"schema_version":"0.1","provider":"stripe","surface":"terminal.refunds.create","field":"payment_intent","kind":"removed","effective_version":"2026-05-27.dahlia","confidence":"high","source":"openapi_diff"}
+{"schema_version":"0.1","provider":"stripe","surface":"terminal.refunds.create","field":"reason","kind":"removed","effective_version":"2026-05-27.dahlia","confidence":"high","source":"openapi_diff"}
+{"schema_version":"0.1","provider":"stripe","surface":"terminal.refunds.create","field":"refund_application_fee","kind":"removed","effective_version":"2026-05-27.dahlia","confidence":"high","source":"openapi_diff"}
+{"schema_version":"0.1","provider":"stripe","surface":"terminal.refunds.create","field":"reverse_transfer","kind":"removed","effective_version":"2026-05-27.dahlia","confidence":"high","source":"openapi_diff"}
