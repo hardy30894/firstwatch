@@ -129,7 +129,9 @@ fn collect_operations(spec: &Value) -> BTreeMap<OpKey, Value> {
         return ops;
     };
     for (path, item) in paths {
-        let Some(item) = item.as_object() else { continue };
+        let Some(item) = item.as_object() else {
+            continue;
+        };
         for method in METHODS {
             if let Some(op) = item.get(method) {
                 ops.insert((method.to_string(), path.clone()), op.clone());
@@ -141,11 +143,17 @@ fn collect_operations(spec: &Value) -> BTreeMap<OpKey, Value> {
 
 fn request_properties(op: &Value) -> BTreeMap<String, Value> {
     let mut props = BTreeMap::new();
-    let Some(content) = op.pointer("/requestBody/content").and_then(Value::as_object) else {
+    let Some(content) = op
+        .pointer("/requestBody/content")
+        .and_then(Value::as_object)
+    else {
         return props;
     };
     for body in content.values() {
-        if let Some(map) = body.pointer("/schema/properties").and_then(Value::as_object) {
+        if let Some(map) = body
+            .pointer("/schema/properties")
+            .and_then(Value::as_object)
+        {
             for (k, v) in map {
                 props.insert(k.clone(), v.clone());
             }
@@ -155,7 +163,10 @@ fn request_properties(op: &Value) -> BTreeMap<String, Value> {
 }
 
 fn request_required(op: &Value) -> Vec<String> {
-    let Some(content) = op.pointer("/requestBody/content").and_then(Value::as_object) else {
+    let Some(content) = op
+        .pointer("/requestBody/content")
+        .and_then(Value::as_object)
+    else {
         return Vec::new();
     };
     content
@@ -229,8 +240,9 @@ mod tests {
             body(json!({ "amount": { "type": "string" } })) } }));
         let events = diff_openapi(&old, &new, "stripe").unwrap();
         assert_eq!(events.len(), 2);
-        assert!(events.iter().any(|e| e.kind == ChangeKind::Removed
-            && e.field.as_deref() == Some("legacy_flag")));
+        assert!(events
+            .iter()
+            .any(|e| e.kind == ChangeKind::Removed && e.field.as_deref() == Some("legacy_flag")));
         assert!(events.iter().any(|e| e.kind == ChangeKind::TypeChanged
             && e.field.as_deref() == Some("amount")
             && e.from.as_deref() == Some("integer")
@@ -239,12 +251,16 @@ mod tests {
 
     #[test]
     fn newly_required_field() {
-        let old = spec(json!({ "/v1/payouts": { "post": { "requestBody": { "content": {
+        let old = spec(
+            json!({ "/v1/payouts": { "post": { "requestBody": { "content": {
             "application/json": { "schema": {
-                "properties": { "currency": { "type": "string" } }, "required": [] } } } } } } }));
-        let new = spec(json!({ "/v1/payouts": { "post": { "requestBody": { "content": {
+                "properties": { "currency": { "type": "string" } }, "required": [] } } } } } } }),
+        );
+        let new = spec(
+            json!({ "/v1/payouts": { "post": { "requestBody": { "content": {
             "application/json": { "schema": {
-                "properties": { "currency": { "type": "string" } }, "required": ["currency"] } } } } } } }));
+                "properties": { "currency": { "type": "string" } }, "required": ["currency"] } } } } } } }),
+        );
         let events = diff_openapi(&old, &new, "stripe").unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].kind, ChangeKind::RequiredAdded);

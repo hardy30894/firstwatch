@@ -33,8 +33,8 @@ pub fn scan_dir(root: &Path) -> Result<Vec<UsageSite>> {
         if !matches!(ext, Some("ts") | Some("tsx") | Some("js") | Some("mjs")) {
             continue;
         }
-        let source = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let source =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let rel = path.strip_prefix(root).unwrap_or(path);
         sites.extend(scan_source(&source, &rel.to_string_lossy())?);
     }

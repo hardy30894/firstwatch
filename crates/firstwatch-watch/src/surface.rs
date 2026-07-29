@@ -35,8 +35,14 @@ mod tests {
     fn collection_and_item_verbs() {
         assert_eq!(sdk_surface("POST", "/v1/charges"), "charges.create");
         assert_eq!(sdk_surface("GET", "/v1/charges"), "charges.list");
-        assert_eq!(sdk_surface("GET", "/v1/charges/{charge}"), "charges.retrieve");
-        assert_eq!(sdk_surface("POST", "/v1/charges/{charge}"), "charges.update");
+        assert_eq!(
+            sdk_surface("GET", "/v1/charges/{charge}"),
+            "charges.retrieve"
+        );
+        assert_eq!(
+            sdk_surface("POST", "/v1/charges/{charge}"),
+            "charges.update"
+        );
         assert_eq!(sdk_surface("DELETE", "/v1/customers/{id}"), "customers.del");
     }
 

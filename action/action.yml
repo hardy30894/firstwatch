@@ -1,0 +1,29 @@
+name: firstwatch
+description: First eyes on upstream API changes. Scans the repo and fails when a changefeed breaks it.
+branding:
+  icon: eye
+  color: blue
+
+inputs:
+  events:
+    description: Path to a ChangeEvent ndjson changefeed.
+    required: true
+  path:
+    description: Directory to scan.
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Install firstwatch
+      shell: bash
+      run: curl -fsSL https://raw.githubusercontent.com/firstwatch-dev/firstwatch/main/install.sh | sh
+    - name: Check
+      shell: bash
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        firstwatch check "${{ inputs.path }}" --events "${{ inputs.events }}" | tee report.txt
+        if grep -q "BREAKS" report.txt; then
+          echo "::error::firstwatch found breaking upstream API changes"
+          exit 1
+        fi

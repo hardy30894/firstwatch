@@ -14,7 +14,7 @@ pub fn match_impacts(events: &[ChangeEvent], sites: &[UsageSite]) -> Vec<Impact>
             }
         }
     }
-    impacts.sort_by(|a, b| b.severity.cmp(&a.severity));
+    impacts.sort_by_key(|i| std::cmp::Reverse(i.severity));
     impacts
 }
 

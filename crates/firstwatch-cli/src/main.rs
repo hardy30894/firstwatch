@@ -7,7 +7,11 @@ use clap::{Parser, Subcommand};
 use firstwatch_schema::{read_ndjson, write_ndjson, ChangeEvent, Impact, Severity};
 
 #[derive(Parser)]
-#[command(name = "firstwatch", version, about = "First eyes on upstream API changes.")]
+#[command(
+    name = "firstwatch",
+    version,
+    about = "First eyes on upstream API changes."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -84,7 +88,11 @@ fn main() -> Result<()> {
             let impacts = firstwatch_match::match_impacts(&events, &sites);
             report(&impacts, sites.len());
         }
-        Command::Fix { path, events, write } => {
+        Command::Fix {
+            path,
+            events,
+            write,
+        } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(events)?))?;
             let sites = firstwatch_scan::scan_dir(&path)?;
             let impacts = firstwatch_match::match_impacts(&events, &sites);
@@ -112,7 +120,10 @@ fn main() -> Result<()> {
                 return Ok(());
             }
             if outcome.patches.is_empty() {
-                println!("firstwatch: nothing to apply, {} refused.", outcome.refusals.len());
+                println!(
+                    "firstwatch: nothing to apply, {} refused.",
+                    outcome.refusals.len()
+                );
                 return Ok(());
             }
             let verifiers = firstwatch_prove::detect_verifiers(&path);

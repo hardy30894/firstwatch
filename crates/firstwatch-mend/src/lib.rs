@@ -16,7 +16,10 @@ pub fn mend(root: &Path, impacts: &[Impact]) -> Result<MendOutcome> {
 
     for impact in impacts {
         let Some(replacement) = replacement_surface(impact) else {
-            refusals.push(refuse(impact, "no deterministic rewrite for this change kind"));
+            refusals.push(refuse(
+                impact,
+                "no deterministic rewrite for this change kind",
+            ));
             continue;
         };
         let lines = match files.entry(impact.site.file.clone()) {
@@ -129,7 +132,10 @@ mod tests {
     #[test]
     fn rewrites_deprecated_surface_with_replacement() {
         let dir = std::env::temp_dir().join("fw-mend-rewrite");
-        setup(&dir, "const c = await stripe.charges.create({ amount: 1 });\n");
+        setup(
+            &dir,
+            "const c = await stripe.charges.create({ amount: 1 });\n",
+        );
         let outcome = mend(
             &dir,
             &[impact(
@@ -156,11 +162,7 @@ mod tests {
     fn refuses_removal_without_replacement() {
         let dir = std::env::temp_dir().join("fw-mend-refuse-kind");
         setup(&dir, "await stripe.charges.create({});\n");
-        let outcome = mend(
-            &dir,
-            &[impact(ChangeKind::Removed, None, "billing.ts", 1)],
-        )
-        .unwrap();
+        let outcome = mend(&dir, &[impact(ChangeKind::Removed, None, "billing.ts", 1)]).unwrap();
         assert!(outcome.patches.is_empty());
         assert_eq!(outcome.refusals.len(), 1);
     }
@@ -180,6 +182,9 @@ mod tests {
         )
         .unwrap();
         assert!(outcome.patches.is_empty());
-        assert_eq!(outcome.refusals[0].reason, "site line no longer contains the surface");
+        assert_eq!(
+            outcome.refusals[0].reason,
+            "site line no longer contains the surface"
+        );
     }
 }

@@ -23,7 +23,10 @@ pub struct Verdict {
 
 impl Verdict {
     fn no_verifiers() -> Self {
-        Verdict { proven: false, checks: Vec::new() }
+        Verdict {
+            proven: false,
+            checks: Vec::new(),
+        }
     }
 }
 
