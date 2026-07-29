@@ -144,6 +144,7 @@ dependencies = [
  "firstwatch-match",
  "firstwatch-scan",
  "firstwatch-schema",
+ "firstwatch-watch",
  "serde_json",
 ]
 
@@ -171,6 +172,15 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "firstwatch-watch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "firstwatch-schema",
  "serde_json",
 ]
 

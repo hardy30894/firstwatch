@@ -1,0 +1,12 @@
+[package]
+name = "firstwatch-watch"
+description = "Turns upstream changes into ChangeEvents. OpenAPI spec diffing first."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+firstwatch-schema = { path = "../firstwatch-schema" }
+anyhow.workspace = true
+serde_json.workspace = true

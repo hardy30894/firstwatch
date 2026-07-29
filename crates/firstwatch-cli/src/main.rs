@@ -15,6 +15,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Diff two OpenAPI specs, emit ChangeEvents as ndjson.
+    Watch {
+        #[arg(long)]
+        old: PathBuf,
+        #[arg(long)]
+        new: PathBuf,
+        #[arg(long, default_value = "stripe")]
+        provider: String,
+    },
     /// Scan a codebase for provider SDK call sites, emit UsageSites as ndjson.
     Scan {
         #[arg(default_value = ".")]
@@ -41,6 +50,12 @@ enum Command {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Watch { old, new, provider } => {
+            let old: serde_json::Value = serde_json::from_reader(BufReader::new(File::open(old)?))?;
+            let new: serde_json::Value = serde_json::from_reader(BufReader::new(File::open(new)?))?;
+            let events = firstwatch_watch::diff_openapi(&old, &new, &provider)?;
+            write_ndjson(io::stdout().lock(), &events)?;
+        }
         Command::Scan { path } => {
             let sites = firstwatch_scan::scan_dir(&path)?;
             write_ndjson(io::stdout().lock(), &sites)?;

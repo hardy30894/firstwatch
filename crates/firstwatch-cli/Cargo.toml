@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 firstwatch-schema = { path = "../firstwatch-schema" }
+firstwatch-watch = { path = "../firstwatch-watch" }
 firstwatch-scan = { path = "../firstwatch-scan" }
 firstwatch-match = { path = "../firstwatch-match" }
 anyhow.workspace = true
