@@ -91,6 +91,21 @@ enum Command {
         #[arg(long)]
         write: bool,
     },
+    /// Blast radius: which repos does a changefeed break, before anything
+    /// ships. Scan and match only; nothing is modified.
+    Blast {
+        /// File with one repo path or git URL per line.
+        #[arg(long)]
+        repos: PathBuf,
+        #[arg(long)]
+        events: PathBuf,
+        /// ProviderSpec ndjson extending the built-in provider table.
+        #[arg(long)]
+        providers: Option<PathBuf>,
+        /// Working directory for clones.
+        #[arg(long, default_value = ".firstwatch-fleet")]
+        work_dir: PathBuf,
+    },
     /// Run pr across a fleet of repos from a list of paths or git URLs.
     Fleet {
         /// File with one repo path or git URL per line.
@@ -103,6 +118,11 @@ enum Command {
         /// Working directory for clones.
         #[arg(long, default_value = ".firstwatch-fleet")]
         work_dir: PathBuf,
+        /// Synthesize fixes for refused impacts via the configured model.
+        /// Proven fixes propagate to later repos, so each unique change
+        /// is synthesized at most once per fleet run.
+        #[arg(long)]
+        llm: bool,
         /// Report what each repo needs without branching or opening PRs.
         #[arg(long)]
         dry_run: bool,
@@ -260,17 +280,80 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+        Command::Blast {
+            repos,
+            events,
+            providers,
+            work_dir,
+        } => {
+            let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(&events)?))?;
+            let provider_set = load_providers(providers)?;
+            let targets = fleet::resolve(&repos, &work_dir)?;
+            let mut total_breaking = 0;
+            let mut by_change: std::collections::BTreeMap<String, Vec<String>> =
+                std::collections::BTreeMap::new();
+            println!("repo  breaking  deprecated  other");
+            for target in &targets {
+                let sites = firstwatch_scan::scan_dir(&target.path, &provider_set)?;
+                let impacts = firstwatch_match::match_impacts(&events, &sites);
+                let breaking = impacts
+                    .iter()
+                    .filter(|i| matches!(i.severity, Severity::BreaksNow | Severity::BreaksLater))
+                    .count();
+                let deprecated = impacts
+                    .iter()
+                    .filter(|i| i.severity == Severity::Deprecated)
+                    .count();
+                let other = impacts.len() - breaking - deprecated;
+                println!("{}  {breaking}  {deprecated}  {other}", target.name);
+                total_breaking += breaking;
+                for impact in &impacts {
+                    if matches!(impact.severity, Severity::BreaksNow | Severity::BreaksLater) {
+                        by_change
+                            .entry(format!(
+                                "{} {}{}",
+                                impact.change.provider,
+                                impact.change.surface,
+                                impact
+                                    .change
+                                    .field
+                                    .as_deref()
+                                    .map(|f| format!(" ({f})"))
+                                    .unwrap_or_default()
+                            ))
+                            .or_default()
+                            .push(format!("{}:{}", target.name, impact.site.line));
+                    }
+                }
+            }
+            if by_change.is_empty() {
+                println!("firstwatch: no repo in the fleet breaks.");
+            } else {
+                println!("\nblast radius by change:");
+                for (change, hits) in &by_change {
+                    println!("  {change} -> {} site(s): {}", hits.len(), hits.join(", "));
+                }
+                println!(
+                    "\nfirstwatch: {total_breaking} breaking site(s) across {} repo(s).",
+                    targets.len()
+                );
+                std::process::exit(1);
+            }
+        }
         Command::Fleet {
             repos,
             events,
             recipes,
             work_dir,
+            llm,
             dry_run,
         } => {
             let events: Vec<ChangeEvent> = read_ndjson(BufReader::new(File::open(&events)?))?;
             let recipes = load_recipes(recipes)?;
             let targets = fleet::resolve(&repos, &work_dir)?;
             let mut summary = Vec::new();
+            let mut templates: std::collections::HashMap<String, (String, String)> =
+                std::collections::HashMap::new();
             for target in &targets {
                 let sites = firstwatch_scan::scan_dir(&target.path, &ProviderSet::default())?;
                 let impacts = firstwatch_match::match_impacts(&events, &sites);
@@ -278,7 +361,17 @@ fn main() -> Result<()> {
                     summary.push((target.name.clone(), 0, 0, "clean".to_string()));
                     continue;
                 }
-                let outcome = firstwatch_mend::mend(&target.path, &impacts, &recipes)?;
+                let mut outcome = firstwatch_mend::mend(&target.path, &impacts, &recipes)?;
+                let propagated = propagate(&target.path, &templates, &mut outcome);
+                if propagated > 0 {
+                    println!(
+                        "firstwatch: {}: reused {propagated} proven fix(es) from earlier repos",
+                        target.name
+                    );
+                }
+                if llm && !dry_run {
+                    synthesize_refused(&target.path, &mut outcome)?;
+                }
                 if dry_run || outcome.patches.is_empty() {
                     summary.push((
                         target.name.clone(),
@@ -299,6 +392,17 @@ fn main() -> Result<()> {
                     )?)
                 };
                 let proven = verdict.as_ref().map(|v| v.proven).unwrap_or(false);
+                if proven {
+                    for patch in &outcome.patches {
+                        templates.insert(
+                            template_key(&patch.impact),
+                            (
+                                patch.old_line.trim().to_string(),
+                                patch.new_line.trim().to_string(),
+                            ),
+                        );
+                    }
+                }
                 let status = if proven {
                     match pr::open_pr(
                         pr::PrArgs {
@@ -437,6 +541,68 @@ fn synthesize_refused(root: &Path, outcome: &mut firstwatch_mend::MendOutcome) -
     }
     outcome.refusals = remaining;
     Ok(())
+}
+
+fn template_key(impact: &Impact) -> String {
+    format!(
+        "{}|{}|{:?}|{}",
+        impact.change.provider,
+        impact.change.surface,
+        impact.change.kind,
+        impact.change.field.as_deref().unwrap_or("")
+    )
+}
+
+/// Cross-repo fix propagation: a patch proven in one repo becomes the
+/// template for the same change elsewhere in the fleet. A refusal whose
+/// site line matches a template's old line (modulo indentation) is
+/// upgraded to a patch carrying the proven rewrite; every repo's prove
+/// gate still runs on the result.
+fn propagate(
+    root: &Path,
+    templates: &std::collections::HashMap<String, (String, String)>,
+    outcome: &mut firstwatch_mend::MendOutcome,
+) -> usize {
+    if templates.is_empty() {
+        return 0;
+    }
+    let mut remaining = Vec::new();
+    let mut count = 0;
+    for refusal in outcome.refusals.drain(..) {
+        let Some((old_line, new_line)) = templates.get(&template_key(&refusal.impact)) else {
+            remaining.push(refusal);
+            continue;
+        };
+        let site = &refusal.impact.site;
+        let Ok(content) = std::fs::read_to_string(root.join(&site.file)) else {
+            remaining.push(refusal);
+            continue;
+        };
+        let Some(site_line) = content.lines().nth(site.line - 1) else {
+            remaining.push(refusal);
+            continue;
+        };
+        if site_line.trim() != old_line.as_str() {
+            remaining.push(refusal);
+            continue;
+        }
+        let indent: String = site_line
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .collect();
+        outcome.patches.push(firstwatch_schema::PatchCandidate {
+            schema_version: firstwatch_schema::SCHEMA_VERSION.into(),
+            file: site.file.clone(),
+            line: site.line,
+            old_line: site_line.to_string(),
+            new_line: format!("{indent}{new_line}"),
+            origin: "propagated".into(),
+            impact: refusal.impact.clone(),
+        });
+        count += 1;
+    }
+    outcome.refusals = remaining;
+    count
 }
 
 fn load_providers(path: Option<PathBuf>) -> Result<ProviderSet> {

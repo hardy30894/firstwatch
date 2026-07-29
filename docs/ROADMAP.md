@@ -45,9 +45,15 @@ stripe/openapi history, install.sh, CI, release workflow, GitHub Action.
 - Done: changelog subcommand, prose release notes to ChangeEvents via
   structured outputs, everything flagged low confidence
 
-## v1.0, network effects
+## Network effects
 
-- Cross-repo fix propagation: the first proven patch for a change becomes
-  a template for every other affected repo
-- Blast-radius prediction: usage graph answers "who breaks if this ships"
-  before the vendor ships it
+- Done: cross-repo fix propagation in fleet. The first proven patch for
+  a change becomes the template for the same change in later repos,
+  re-indented per site and still proven per repo. With --llm, each
+  unique change is synthesized at most once per fleet run.
+- Done: blast, per-repo and per-change break report for a changefeed
+  across a fleet, nonzero exit for CI gating.
+- Later, needs adoption data: propagation across fleet runs (persist
+  templates to the registry), ecosystem-wide blast radius.
+
+First public release ships as v0.1.0. Version numbers stay honest.

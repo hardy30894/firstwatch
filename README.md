@@ -58,6 +58,28 @@ firstwatch: PR opened from firstwatch/stripe-fixes.
 
 The PR body carries the proof checks, one line per patch with the effective version and an evidence link, and a "needs human attention" section for every refusal. No proof, no PR, unless you pass --allow-unproven.
 
+When a deterministic fix is impossible, opt into model synthesis with `--llm`. Bring any model:
+
+```
+export ANTHROPIC_API_KEY=...                       # default: Claude
+export FIRSTWATCH_LLM_PROVIDER=openai              # or any OpenAI-compatible server
+export FIRSTWATCH_LLM_BASE_URL=http://localhost:11434/v1/chat/completions
+export FIRSTWATCH_LLM_MODEL=llama3.1               # Ollama, vLLM, Groq, gateways
+export FIRSTWATCH_LLM_CMD=./my-llm-bridge.sh       # escape hatch: your own script,
+                                                   # prompt on stdin, json on stdout
+```
+
+Synthesized patches are labeled and face the same prove gate as everything else. Whichever model you bring, the proof gate stays the judge.
+
+Across many repos:
+
+```
+firstwatch blast --repos repos.txt --events changefeed.ndjson   # who breaks, before it ships
+firstwatch fleet --repos repos.txt --events changefeed.ndjson --llm
+```
+
+Fleet runs the whole pipeline per repo and opens PRs. With `--llm`, each unique change is synthesized at most once: the first proven fix becomes the template for the same change in every later repo, so the fleet gets cheaper and more reliable as it runs.
+
 ## Status
 
 v0.1, early. Working today: OpenAPI spec diffing (validated on real 7.8MB Stripe specs, ~110ms per diff), TypeScript and Python scanning across providers, changefeed matching, `check` reports, `fix` with three patch tiers (deterministic rewrites, provider recipes, opt-in Claude synthesis via `--llm` using your own key), changelog parsing to structured events, the prove gate (typecheck, tests, differential replay in staged copies; failed proof blocks the write), `pr`, and `fleet` for many repos. Synthesized patches are always labeled and face the same proof gate. The Stripe changefeed in `registry/` is generated from real stripe/openapi tag history by `scripts/seed-stripe.sh`. Schema is versioned but not yet stable.
