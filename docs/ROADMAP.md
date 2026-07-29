@@ -34,14 +34,15 @@ stripe/openapi history, install.sh, CI, release workflow, GitHub Action.
 
 ## v0.4, agent tier and provider variant
 
+- Done: provider publishing flow, action/publish diffs the spec on every
+  release and appends to the provider's changefeed
+- Done: multi-repo runner, firstwatch fleet fans scan-match-mend-prove-pr
+  across a list of repos or clone URLs. The per-provider variant is
+  assembled: publish action upstream, fleet downstream.
 - Mend tier 3: LLM synthesis for non-mechanical changes. Pluggable provider,
   user's own key, off by default, always behind the prove gate.
 - Changelog parser in watch: prose release notes to ChangeEvents, flagged
   lower confidence
-- Provider publishing flow: Action template that diffs the spec on release
-  and emits a changefeed with recipes
-- Multi-repo runner: fan pr out across repos under a GitHub App install.
-  With this, "install Stripe's update agent" is assembled.
 
 ## v1.0, network effects
 
